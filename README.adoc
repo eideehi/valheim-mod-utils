@@ -1,0 +1,25 @@
+= ModUtils - Valheim Library
+:uri-configuration-manager: https://github.com/BepInEx/BepInEx.ConfigurationManager
+:uri-litjson: https://litjson.net
+:uri-license: link:LICENSE
+:uri-issues: https://github.com/eideehi/valheim-ModUtils/issues
+:uri-discord: https://discord.gg/DDQqxkK7s6
+:image-uri-bug-report: https://app.box.com/shared/static/g2v3vbju4jazq7kycoigp60ltki2kw8i.png
+:image-uri-discord: https://app.box.com/shared/static/0s09ti60hvyyp5k98xyrnkfp683mrt9r.png
+
+ModUtils is a library of utilities for Valheim mod development.
+
+== Contacts
+image::{image-uri-bug-report}[link={uri-issues},alt="Bug report on Issues"]
+*Only bug reports are accepted under Issues.*
+
+image::{image-uri-discord}[link={uri-discord},alt="eidee.net - Discord Server"]
+*Questions, suggestions and comments are welcome on the Discord Server.*
+
+== Credits
+* Dependencies:
+** {uri-configuration-manager}[Configuration Manager]
+** {uri-litjson}[LitJSON]
+
+== License
+ModUtils is developed under the MIT license. For the full text of the license, please see the {uri-license}[LICENSE] file.
