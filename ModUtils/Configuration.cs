@@ -7,6 +7,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using BepInEx.Configuration;
+using HarmonyLib;
 using UnityEngine;
 using TypeConverter = BepInEx.Configuration.TypeConverter;
 
@@ -29,13 +30,16 @@ namespace ModUtils
 
         static Configuration()
         {
-            Reflections.InvokeMethod(Localization.instance, "AddWord", TranslationKeyEnabled,
-                "Enabled");
-            Reflections.InvokeMethod(Localization.instance, "AddWord", TranslationKeyDisabled,
-                "Disabled");
-            Reflections.InvokeMethod(Localization.instance, "AddWord", TranslationKeyAdd, "Add");
-            Reflections.InvokeMethod(Localization.instance, "AddWord", TranslationKeyRemove,
-                "Remove");
+            var addWord =
+                MethodInvoker.GetHandler(AccessTools.Method(typeof(Localization), "AddWord"));
+            addWord.Invoke(Localization.instance,
+                L10N.GetTranslationKey(L10NPrefix, TranslationKeyEnabled), "Enabled");
+            addWord.Invoke(Localization.instance,
+                L10N.GetTranslationKey(L10NPrefix, TranslationKeyDisabled), "Disabled");
+            addWord.Invoke(Localization.instance,
+                L10N.GetTranslationKey(L10NPrefix, TranslationKeyAdd), "Add");
+            addWord.Invoke(Localization.instance,
+                L10N.GetTranslationKey(L10NPrefix, TranslationKeyRemove), "Remove");
 
             if (!TomlTypeConverter.CanConvert(typeof(StringList)))
                 TomlTypeConverter.AddConverter(typeof(StringList), new TypeConverter

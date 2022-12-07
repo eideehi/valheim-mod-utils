@@ -46,7 +46,7 @@ namespace ModUtils
             Reflections.InvokeMethod(Localization, "AddWord", key, word);
         }
 
-        private static string GetTranslationKey(string prefix, string internalName)
+        internal static string GetTranslationKey(string prefix, string internalName)
         {
             if (string.IsNullOrEmpty(internalName)) return "";
 
