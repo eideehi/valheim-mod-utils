@@ -29,10 +29,11 @@ namespace ModUtils
 
             if (NameCache.TryGetValue(component, out var name)) return name;
 
-            name = AccessTools.GetDeclaredFields(component.GetType())
-                              .Where(x => x.Name == "m_name" && x.FieldType == typeof(string))
-                              .Select(x => x.GetValue(component) as string)
-                              .FirstOrDefault();
+            name = component.GetType()
+                            .GetFields(AccessTools.all)
+                            .Where(x => x.Name == "m_name" && x.FieldType == typeof(string))
+                            .Select(x => x.GetValue(component) as string)
+                            .FirstOrDefault();
 
             if (string.IsNullOrEmpty(name))
             {
@@ -57,11 +58,12 @@ namespace ModUtils
 
             if (ZNetViewCache.TryGetValue(component, out zNetView)) return zNetView != null;
 
-            zNetView = AccessTools.GetDeclaredFields(component.GetType())
-                                  .Where(x =>
-                                      x.Name == "m_nview" && x.FieldType == typeof(ZNetView))
-                                  .Select(x => x.GetValue(component) as ZNetView)
-                                  .FirstOrDefault() ?? component.GetComponent<ZNetView>();
+            zNetView = component.GetType()
+                                .GetFields(AccessTools.all)
+                                .Where(x =>
+                                    x.Name == "m_nview" && x.FieldType == typeof(ZNetView))
+                                .Select(x => x.GetValue(component) as ZNetView)
+                                .FirstOrDefault() ?? component.GetComponent<ZNetView>();
 
             ZNetViewCache.Add(component, zNetView);
             return zNetView != null;
