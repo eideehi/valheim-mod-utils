@@ -2,45 +2,23 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Globalization;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Text;
 using BepInEx.Configuration;
-using HarmonyLib;
-using UnityEngine;
 using TypeConverter = BepInEx.Configuration.TypeConverter;
 
 namespace ModUtils
 {
     public class Configuration
     {
-        private const string L10NPrefix = "mod_utils";
-        private const string TranslationKeyEnabled = "@config_button_enabled";
-        private const string TranslationKeyDisabled = "@config_button_disabled";
-        private const string TranslationKeyAdd = "@config_button_add";
-        private const string TranslationKeyRemove = "@config_button_remove";
-
         private const int DefaultOrder = 4096;
 
         private readonly ConfigFile _config;
-        private readonly ConditionalWeakTable<ConfigEntryBase, string> _inputTextCache;
         private readonly L10N _localization;
         private Logger _logger;
 
         static Configuration()
         {
-            var addWord =
-                MethodInvoker.GetHandler(AccessTools.Method(typeof(Localization), "AddWord"));
-            addWord.Invoke(Localization.instance,
-                L10N.GetTranslationKey(L10NPrefix, TranslationKeyEnabled), "Enabled");
-            addWord.Invoke(Localization.instance,
-                L10N.GetTranslationKey(L10NPrefix, TranslationKeyDisabled), "Disabled");
-            addWord.Invoke(Localization.instance,
-                L10N.GetTranslationKey(L10NPrefix, TranslationKeyAdd), "Add");
-            addWord.Invoke(Localization.instance,
-                L10N.GetTranslationKey(L10NPrefix, TranslationKeyRemove), "Remove");
-
             if (!TomlTypeConverter.CanConvert(typeof(StringList)))
                 TomlTypeConverter.AddConverter(typeof(StringList), new TypeConverter
                 {
@@ -69,7 +47,6 @@ namespace ModUtils
         {
             _config = config;
             _localization = localization;
-            _inputTextCache = new ConditionalWeakTable<ConfigEntryBase, string>();
         }
 
         private string Section { get; set; } = "general";
@@ -144,7 +121,7 @@ namespace ModUtils
                 Category = GetSection(section),
                 Order = order,
                 DispName = GetName(section, key),
-                CustomDrawer = GetCustomDrawer(typeof(T), acceptableValue)
+                CustomDrawer = ConfigurationCustomDrawer.Get(typeof(T), acceptableValue)
             };
             initializer?.Invoke(attributes);
 
@@ -201,176 +178,6 @@ namespace ModUtils
         private string GetDescription(string section, string key)
         {
             return _localization.Translate($"@config_{section}_{key}_description");
-        }
-
-        private Action<ConfigEntryBase> GetCustomDrawer(Type type,
-            AcceptableValueBase acceptableValue)
-        {
-            if (type == typeof(bool)) return BoolCustomDrawer;
-            if (type == typeof(float) && acceptableValue is AcceptableValueRange<float>)
-                return FloatRangeCustomDrawer;
-            if (type == typeof(StringList)) return StringListCustomDrawer;
-            if (type.IsEnum && type.GetCustomAttributes(typeof(FlagsAttribute), false).Any())
-                return FlagsCustomDrawer;
-            return null;
-        }
-
-        private void BoolCustomDrawer(ConfigEntryBase entry)
-        {
-            var @bool = (bool)entry.BoxedValue;
-            var text = L10N.Translate(L10NPrefix,
-                @bool ? TranslationKeyEnabled : TranslationKeyDisabled);
-            var result = GUILayout.Toggle(@bool, text, GUILayout.ExpandWidth(true));
-            if (result != @bool)
-                entry.BoxedValue = result;
-        }
-
-        private void FloatRangeCustomDrawer(ConfigEntryBase entry)
-        {
-            var range = (AcceptableValueRange<float>)entry.Description.AcceptableValues;
-            var value = (float)entry.BoxedValue;
-            var min = range.MinValue;
-            var max = range.MaxValue;
-
-            var result = GUILayout.HorizontalSlider(value, min, max, GUILayout.ExpandWidth(true));
-            result = Mathf.Floor(result * 100f) / 100f;
-            if (Math.Abs(result - value) > Mathf.Abs(max - min) / 1000)
-                entry.BoxedValue = result;
-
-            var stringValue = value.ToString("0.00", CultureInfo.InvariantCulture);
-            var stringResult = GUILayout.TextField(stringValue, GUILayout.Width(50));
-            if (stringResult == stringValue) return;
-
-            try
-            {
-                result = (float)Convert.ToDouble(stringResult, CultureInfo.InvariantCulture);
-                var newValue = Convert.ChangeType(range.Clamp(result), entry.SettingType,
-                    CultureInfo.InvariantCulture);
-                entry.BoxedValue = newValue;
-            }
-            catch (FormatException)
-            {
-                // Ignore user typing in bad data
-            }
-        }
-
-        private void StringListCustomDrawer(ConfigEntryBase entry)
-        {
-            var guiWidth = Mathf.Min(Screen.width, 650);
-            var maxWidth = guiWidth - Mathf.RoundToInt(guiWidth / 2.5f) - 115;
-            var addButtonText = L10N.Translate(L10NPrefix, TranslationKeyAdd);
-            var removeButtonText = L10N.Translate(L10NPrefix, TranslationKeyRemove);
-
-            var list = new StringList((StringList)entry.BoxedValue);
-
-            GUILayout.BeginVertical(GUILayout.MaxWidth(maxWidth));
-
-            GUILayout.BeginHorizontal();
-
-            if (!_inputTextCache.TryGetValue(entry, out var inputText))
-                inputText = "";
-
-            var resultText = GUILayout.TextField(inputText, GUILayout.ExpandWidth(true));
-            if (resultText != inputText)
-            {
-                _inputTextCache.Remove(entry);
-                _inputTextCache.Add(entry, resultText);
-            }
-
-            var add = GUILayout.Button(addButtonText, GUILayout.ExpandWidth(false));
-            if (add && !string.IsNullOrEmpty(resultText))
-            {
-                if (list.TryAdd(resultText))
-                    entry.BoxedValue = list;
-
-                _inputTextCache.Remove(entry);
-                _inputTextCache.Add(entry, "");
-            }
-
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            var lineWidth = 0.0;
-            foreach (var value in list.ToList())
-            {
-                var elementWidth =
-                    Mathf.FloorToInt(GUI.skin.label.CalcSize(new GUIContent(value)).x) +
-                    Mathf.FloorToInt(GUI.skin.button.CalcSize(new GUIContent(removeButtonText)).x);
-
-                lineWidth += elementWidth;
-                if (lineWidth > maxWidth)
-                {
-                    GUILayout.EndHorizontal();
-                    lineWidth = elementWidth;
-                    GUILayout.BeginHorizontal();
-                }
-
-                GUILayout.Label(value, GUILayout.ExpandWidth(false));
-                if (GUILayout.Button(removeButtonText, GUILayout.ExpandWidth(false)))
-                    if (list.Remove(value))
-                        entry.BoxedValue = list;
-            }
-
-            GUILayout.EndHorizontal();
-
-            GUILayout.EndVertical();
-            GUILayout.FlexibleSpace();
-        }
-
-        private static void FlagsCustomDrawer(ConfigEntryBase entry)
-        {
-            var guiWidth = Mathf.Min(Screen.width, 650);
-            var maxWidth = guiWidth - Mathf.RoundToInt(guiWidth / 2.5f) - 115;
-
-            var type = entry.SettingType;
-            var currentValue = Convert.ToInt64(entry.BoxedValue);
-            var validator = entry.Description.AcceptableValues;
-
-            GUILayout.BeginVertical(GUILayout.MaxWidth(maxWidth));
-
-            var lineWidth = 0;
-            GUILayout.BeginHorizontal();
-            foreach (var @enum in Enum.GetValues(type))
-            {
-                if (validator != null && !validator.IsValid(@enum)) continue;
-
-                var value = Convert.ToInt64(@enum);
-                if (value == 0) continue;
-
-                var label = GetFlagsLabel(type, @enum);
-
-                var width =
-                    Mathf.FloorToInt(GUI.skin.toggle.CalcSize(new GUIContent(label + "_")).x);
-                lineWidth += width;
-                if (lineWidth > maxWidth)
-                {
-                    GUILayout.EndHorizontal();
-                    lineWidth = width;
-                    GUILayout.BeginHorizontal();
-                }
-
-                GUI.changed = false;
-                var @checked = GUILayout.Toggle((currentValue & value) == value, label,
-                    GUILayout.ExpandWidth(false));
-                if (!GUI.changed) continue;
-
-                var newValue = @checked ? currentValue | value : currentValue & ~value;
-                entry.BoxedValue = Enum.ToObject(type, newValue);
-            }
-
-            GUILayout.EndHorizontal();
-            GUI.changed = false;
-
-            GUILayout.EndVertical();
-            GUILayout.FlexibleSpace();
-        }
-
-        private static string GetFlagsLabel(Type type, object @object)
-        {
-            var member = type.GetMember(Enum.GetName(type, @object) ?? "").FirstOrDefault();
-            var attribute = member?.GetCustomAttributes(typeof(DescriptionAttribute), false)
-                                  .OfType<DescriptionAttribute>().FirstOrDefault();
-            return attribute?.Description ?? @object.ToString();
         }
     }
 
