@@ -1,3 +1,8 @@
+#### v1.0.2 [2022-12-18]
+- Fix default translation of custom GUI for config
+- Change Inventories utility functions signature
+- Add Inventories utility functions
+
 #### v1.0.1 [2022-12-16]
 - Split custom drawer for config into separate files \
   And, add a function that adding custom drawer externally
