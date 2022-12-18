@@ -6,7 +6,7 @@ namespace ModUtils
 {
     public static class Inventories
     {
-        public static IList<ItemDrop.ItemData> GetItems(Inventory inventory, string name,
+        public static IEnumerable<ItemDrop.ItemData> GetItems(Inventory inventory, string name,
             int quality = -1, bool isPrefabName = false)
         {
             return inventory.GetAllItems()
@@ -14,12 +14,11 @@ namespace ModUtils
                                 (isPrefabName
                                     ? data.m_dropPrefab.name == name
                                     : data.m_shared.m_name == name) &&
-                                (quality < 0 || data.m_quality == quality))
-                            .ToList();
+                                (quality < 0 || data.m_quality == quality));
         }
 
-        public static int FillFreeStackSpace(Inventory from, Inventory to, string name,
-            int quality = -1, int amount = int.MaxValue)
+        public static int FillFreeStackSpace(Inventory from, Inventory to, string name, int amount,
+            int quality = -1, bool isPrefabName = false)
         {
             if (amount <= 0) return 0;
 
@@ -27,8 +26,8 @@ namespace ModUtils
             if (remain == 0) return 0;
 
             var fillCount = 0;
-            var toInventoryItems = GetItems(to, name, quality);
-            foreach (var fromInventoryItem in GetItems(from, name, quality))
+            var toInventoryItems = GetItems(to, name, quality, isPrefabName).ToList();
+            foreach (var fromInventoryItem in GetItems(from, name, quality, isPrefabName))
             foreach (var toInventoryItem in toInventoryItems)
             {
                 if (toInventoryItem.m_stack >= toInventoryItem.m_shared.m_maxStackSize)
@@ -59,13 +58,13 @@ namespace ModUtils
             return fillCount;
         }
 
-        public static int RemoveItem(Inventory inventory, string name, int quality = -1,
-            int amount = int.MaxValue)
+        public static int RemoveItem(Inventory inventory, string name, int amount, int quality = -1,
+            bool isPrefabName = false)
         {
             if (amount <= 0) return 0;
 
             var removeCount = 0;
-            foreach (var item in GetItems(inventory, name, quality))
+            foreach (var item in GetItems(inventory, name, quality, isPrefabName))
             {
                 var count = Mathf.Min(amount, item.m_stack);
                 item.m_stack -= count;
