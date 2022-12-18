@@ -58,6 +58,46 @@ namespace ModUtils
             return fillCount;
         }
 
+        public static int FillFreeStackSpace(Inventory inventory, string name, int amount,
+            int quality = -1, bool isPrefabName = false)
+        {
+            if (amount <= 0) return 0;
+
+            var remain = amount;
+            var fillCount = 0;
+            foreach (var item in GetItems(inventory, name, quality, isPrefabName))
+            {
+                if (item.m_stack >= item.m_shared.m_maxStackSize)
+                    continue;
+
+                var count = Mathf.Min(remain, item.m_shared.m_maxStackSize - item.m_stack);
+                if (count <= 0) continue;
+
+                item.m_stack += count;
+                fillCount += count;
+                remain -= count;
+
+                Reflections.InvokeMethod(inventory, "Changed");
+
+                if (remain == 0) break;
+            }
+
+            return fillCount;
+        }
+
+        public static bool HaveItem(Inventory inventory, string name, int amount, int quality = -1,
+            bool isPrefabName = false)
+        {
+            var totalCount = 0;
+            foreach (var item in GetItems(inventory, name, quality, isPrefabName))
+            {
+                totalCount += item.m_stack;
+                if (totalCount >= amount) return true;
+            }
+
+            return false;
+        }
+
         public static int RemoveItem(Inventory inventory, string name, int amount, int quality = -1,
             bool isPrefabName = false)
         {
