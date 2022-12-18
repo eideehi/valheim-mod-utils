@@ -28,8 +28,8 @@ namespace ModUtils
             var l10N = Localization.instance;
             addWord.Invoke(l10N, L10N.GetTranslationKey(L10NPrefix, EnabledKey), "Enabled");
             addWord.Invoke(l10N, L10N.GetTranslationKey(L10NPrefix, DisabledKey), "Disabled");
-            addWord.Invoke(l10N, L10N.GetTranslationKey(L10NPrefix, AddKey), "Add");
-            addWord.Invoke(l10N, L10N.GetTranslationKey(L10NPrefix, RemoveKey), "Remove");
+            addWord.Invoke(l10N, L10N.GetTranslationKey(L10NPrefix, AddKey), "+");
+            addWord.Invoke(l10N, L10N.GetTranslationKey(L10NPrefix, RemoveKey), "x");
 
             CustomDrawers = new Dictionary<IsMatchConfig, CustomDrawerSupplier>
             {
