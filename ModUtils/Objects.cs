@@ -25,7 +25,7 @@ namespace ModUtils
 
         public static string GetName(Component component)
         {
-            if (component == null) return "";
+            if (!component) return "";
 
             if (NameCache.TryGetValue(component, out var name)) return name;
 
@@ -50,13 +50,13 @@ namespace ModUtils
 
         public static bool GetZNetView(Component component, out ZNetView zNetView)
         {
-            if (component == null)
+            if (!component)
             {
                 zNetView = null;
                 return false;
             }
 
-            if (ZNetViewCache.TryGetValue(component, out zNetView)) return zNetView != null;
+            if (ZNetViewCache.TryGetValue(component, out zNetView)) return zNetView;
 
             zNetView = component.GetType()
                                 .GetFields(AccessTools.all)
