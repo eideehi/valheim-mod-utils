@@ -5,7 +5,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
 using BepInEx.Configuration;
-using HarmonyLib;
 using UnityEngine;
 
 namespace ModUtils
@@ -23,13 +22,22 @@ namespace ModUtils
 
         static ConfigurationCustomDrawer()
         {
-            var addWord =
-                MethodInvoker.GetHandler(AccessTools.Method(typeof(Localization), "AddWord"));
-            var l10N = Localization.instance;
-            addWord.Invoke(l10N, L10N.GetTranslationKey(L10NPrefix, EnabledKey), "Enabled");
-            addWord.Invoke(l10N, L10N.GetTranslationKey(L10NPrefix, DisabledKey), "Disabled");
-            addWord.Invoke(l10N, L10N.GetTranslationKey(L10NPrefix, AddKey), "+");
-            addWord.Invoke(l10N, L10N.GetTranslationKey(L10NPrefix, RemoveKey), "x");
+            var translations = Reflections.GetField<Dictionary<string, string>>(Localization.instance, "m_translations");
+            var translationKey = L10N.GetTranslationKey(L10NPrefix, EnabledKey);
+            if (!translations.ContainsKey(translationKey))
+                translations.Add(translationKey, "Enabled");
+
+            translationKey = L10N.GetTranslationKey(L10NPrefix, DisabledKey);
+            if (!translations.ContainsKey(translationKey))
+                translations.Add(translationKey, "Disabled");
+
+            translationKey = L10N.GetTranslationKey(L10NPrefix, AddKey);
+            if (!translations.ContainsKey(translationKey))
+                translations.Add(translationKey, "Add");
+
+            translationKey = L10N.GetTranslationKey(L10NPrefix, RemoveKey);
+            if (!translations.ContainsKey(translationKey))
+                translations.Add(translationKey, "Remove");
 
             CustomDrawers = new Dictionary<IsMatchConfig, CustomDrawerSupplier>
             {
