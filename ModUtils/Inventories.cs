@@ -17,6 +17,18 @@ namespace ModUtils
                                 (quality < 0 || data.m_quality == quality));
         }
 
+        public static int AddItem(Inventory inventory, GameObject prefab, int amount, int quality = -1)
+        {
+            var data = prefab.GetComponent<ItemDrop>().m_itemData.Clone();
+            data.m_dropPrefab = prefab;
+            data.m_stack = Mathf.Min(amount, data.m_shared.m_maxStackSize);
+            data.m_quality = Mathf.Clamp(quality, 1, data.m_shared.m_maxQuality);
+
+            var count = inventory.CountItems(data.m_shared.m_name, quality);
+            inventory.AddItem(data);
+            return inventory.CountItems(data.m_shared.m_name, quality) - count;
+        }
+
         public static int FillFreeStackSpace(Inventory from, Inventory to, string name, int amount,
             int quality = -1, bool isPrefabName = false)
         {
