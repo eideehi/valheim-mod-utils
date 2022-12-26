@@ -1,3 +1,9 @@
+#### v1.0.3 [2022-12-26]
+- Add utility to add item to inventory
+- Fix initialization for custom GUI translations
+- Fix utilities for objects
+- Fix null check of Unity Object with equal operator
+
 #### v1.0.2 [2022-12-18]
 - Fix default translation of custom GUI for config
 - Change Inventories utility functions signature
