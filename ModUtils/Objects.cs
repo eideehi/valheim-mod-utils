@@ -40,7 +40,8 @@ namespace ModUtils
                 var hoverable = component.GetComponent<Hoverable>();
                 if (hoverable != null)
                     name = hoverable is HoverText text ? text.m_text : hoverable.GetHoverName();
-                else
+
+                if (string.IsNullOrEmpty(name))
                     name = Utils.GetPrefabName(component.gameObject);
             }
 
