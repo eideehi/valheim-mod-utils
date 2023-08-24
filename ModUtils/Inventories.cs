@@ -29,12 +29,12 @@ namespace ModUtils
             return inventory.CountItems(data.m_shared.m_name, quality) - count;
         }
 
-        public static int FillFreeStackSpace(Inventory from, Inventory to, string name, int amount,
+        public static int FillFreeStackSpace(Inventory from, Inventory to, string name, float worldLevel, int amount,
             int quality = -1, bool isPrefabName = false)
         {
             if (amount <= 0) return 0;
 
-            var remain = Mathf.Min(amount, to.FindFreeStackSpace(name));
+            var remain = Mathf.Min(amount, to.FindFreeStackSpace(name, worldLevel));
             if (remain == 0) return 0;
 
             var fillCount = 0;
