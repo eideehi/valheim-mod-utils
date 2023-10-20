@@ -164,7 +164,7 @@ namespace ModUtils
                             .Count(path => loading.Invoke(path, language)) > 0;
         }
 
-        public void LoadJson(string languagesDir)
+        public void LoadTranslations(string languagesDir, string language)
         {
             _cache = new Dictionary<string, TranslationsFile>();
 
@@ -174,17 +174,21 @@ namespace ModUtils
                 return;
             }
 
-            var selectedLanguage = Localization.GetSelectedLanguage();
-            if (selectedLanguage != DefaultLanguage)
+            if (language != DefaultLanguage)
                 if (!LoadAllFile(languagesDir, JsonFilePattern, DefaultLanguage, ReadJsonFile))
                     _logger?.Warning(
                         $"Directory does not contain a translation file for the default language: {languagesDir}");
 
-            if (!LoadAllFile(languagesDir, JsonFilePattern, selectedLanguage, ReadJsonFile))
+            if (!LoadAllFile(languagesDir, JsonFilePattern, language, ReadJsonFile))
                 _logger?.Warning(
-                    $"Directory does not contain a translation file for the {selectedLanguage}: {languagesDir}");
+                    $"Directory does not contain a translation file for the {language}: {languagesDir}");
 
             _cache = null;
+        }
+
+        public void LoadTranslations(string languagesDir)
+        {
+            LoadTranslations(languagesDir, Localization.GetSelectedLanguage());
         }
 
         private bool ReadJsonFile(string path, string language)
