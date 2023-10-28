@@ -5,6 +5,16 @@ namespace ModUtils
 {
     public static class Json
     {
+        public static void AddImporter<TJson, TValue>(ImporterFunc<TJson, TValue> importer)
+        {
+            JsonMapper.RegisterImporter(importer);
+        }
+
+        public static void AddExporter<T>(ExporterFunc<T> exporter)
+        {
+            JsonMapper.RegisterExporter(exporter);
+        }
+
         public static T Parse<T>(string jsonText, ReaderOption option)
         {
             return JsonMapper.ToObject<T>(new JsonReader(jsonText)
