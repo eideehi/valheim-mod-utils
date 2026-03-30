@@ -65,9 +65,10 @@ namespace ModUtils
                                     x.Name == "m_nview" && x.FieldType == typeof(ZNetView))
                                 .Select(x => x.GetValue(component) as ZNetView)
                                 .FirstOrDefault() ?? component.GetComponent<ZNetView>();
+            if (zNetView == null) return false;
 
             ZNetViewCache.Add(component, zNetView);
-            return zNetView != null;
+            return true;
         }
 
         public static bool GetZdoid(Component component, out ZDOID id)
