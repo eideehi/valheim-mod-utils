@@ -77,6 +77,24 @@ namespace ModUtils
             return id != ZDOID.None;
         }
 
+        public static bool HasValidOwnership(ZNetView zNetView)
+        {
+            return zNetView != null &&
+                   zNetView.GetZDO() != null &&
+                   zNetView.IsValid() &&
+                   zNetView.IsOwner();
+        }
+
+        public static bool HasValidOwnership(Component component)
+        {
+            return HasValidOwnership(component, out _);
+        }
+
+        public static bool HasValidOwnership(Component component, out ZNetView zNetView)
+        {
+            return GetZNetView(component, out zNetView) && HasValidOwnership(zNetView);
+        }
+
         public static float Distance(Component obj1, Component obj2)
         {
             return Vector3.Distance(obj1.transform.position, obj2.transform.position);

@@ -45,5 +45,13 @@ namespace ModUtils
         {
             return Cache.ToList();
         }
+
+        public static void Fill(List<T> buffer)
+        {
+            if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+
+            buffer.Clear();
+            buffer.AddRange(Cache);
+        }
     }
 }

@@ -92,6 +92,11 @@ namespace ModUtils
         public bool IsDirty { get; private set; }
         public int NodeCount => _nodes.Count;
 
+        public IEnumerable<TNode> EnumerateNodes()
+        {
+            return _nodes;
+        }
+
         public IEnumerable<TNode> GetAllNodes()
         {
             return _nodes.ToList();

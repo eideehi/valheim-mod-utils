@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using BepInEx.Configuration;
+using HarmonyLib;
 using TypeConverter = BepInEx.Configuration.TypeConverter;
 
 namespace ModUtils
@@ -12,13 +13,36 @@ namespace ModUtils
     public class Configuration
     {
         private const int DefaultOrder = 4096;
+        private static readonly object LocalizedEntriesLock = new object();
+        private static readonly Dictionary<ConfigEntryBase, LocalizedConfigEntry> LocalizedEntries;
+        private static readonly string[] DescriptionFieldNames =
+        {
+            "<Description>k__BackingField",
+            "Description",
+            "description",
+            "_description"
+        };
 
         private readonly ConfigFile _config;
         private readonly L10N _localization;
         private Logger _logger;
 
+        private sealed class LocalizedConfigEntry
+        {
+            public ConfigEntryBase Entry { get; set; }
+            public L10N Localization { get; set; }
+            public string Section { get; set; }
+            public string Key { get; set; }
+            public ConfigurationManagerAttributes Attributes { get; set; }
+            public bool CategoryManaged { get; set; }
+            public bool DispNameManaged { get; set; }
+            public bool DescriptionManaged { get; set; }
+        }
+
         static Configuration()
         {
+            LocalizedEntries = new Dictionary<ConfigEntryBase, LocalizedConfigEntry>();
+
             if (!TomlTypeConverter.CanConvert(typeof(StringList)))
                 TomlTypeConverter.AddConverter(typeof(StringList), new TypeConverter
                 {
@@ -47,6 +71,131 @@ namespace ModUtils
         {
             _config = config;
             _localization = localization;
+        }
+
+        internal static void RefreshAllLocalizedMetadata()
+        {
+            LocalizedConfigEntry[] entries;
+            lock (LocalizedEntriesLock)
+                entries = LocalizedEntries.Values.ToArray();
+
+            foreach (var entry in entries)
+                RefreshLocalizedMetadata(entry);
+        }
+
+        private static void RegisterLocalizedEntry(ConfigEntryBase entry, L10N localization,
+            string section, string key, ConfigurationManagerAttributes attributes,
+            bool categoryManaged, bool dispNameManaged, bool descriptionManaged)
+        {
+            var localizedEntry = new LocalizedConfigEntry
+            {
+                Entry = entry,
+                Localization = localization,
+                Section = section,
+                Key = key,
+                Attributes = attributes,
+                CategoryManaged = categoryManaged,
+                DispNameManaged = dispNameManaged,
+                DescriptionManaged = descriptionManaged
+            };
+
+            lock (LocalizedEntriesLock)
+                LocalizedEntries[entry] = localizedEntry;
+
+            RefreshLocalizedMetadata(localizedEntry);
+        }
+
+        private static void RefreshLocalizedMetadata(LocalizedConfigEntry entry)
+        {
+            if (entry?.Entry == null || entry.Localization == null) return;
+
+            try
+            {
+                var attributes = entry.Attributes;
+                if (attributes == null) return;
+
+                if (entry.CategoryManaged)
+                    attributes.Category =
+                        entry.Localization.Translate($"@config_{entry.Section}_section");
+
+                if (entry.DispNameManaged)
+                    attributes.DispName =
+                        entry.Localization.Translate($"@config_{entry.Section}_{entry.Key}_name");
+
+                var description = entry.DescriptionManaged
+                    ? entry.Localization.Translate($"@config_{entry.Section}_{entry.Key}_description")
+                    : attributes.Description;
+                attributes.Description = description;
+
+                var currentDescription = entry.Entry.Description;
+                var acceptableValues = currentDescription?.AcceptableValues;
+                var tags = ReplaceConfigurationManagerAttributes(currentDescription?.Tags, attributes);
+                var newDescription = new ConfigDescription(description, acceptableValues, tags);
+
+                if (!TrySetEntryDescription(entry.Entry, newDescription))
+                    UnityEngine.Debug.LogError(
+                        $"[ModUtils] Failed to replace ConfigDescription for [{entry.Section}:{entry.Key}].");
+            }
+            catch (Exception e)
+            {
+                UnityEngine.Debug.LogError(
+                    $"[ModUtils] Failed to refresh localized config metadata for [{entry.Section}:{entry.Key}]: {e}");
+            }
+        }
+
+        private static object[] ReplaceConfigurationManagerAttributes(object[] tags,
+            ConfigurationManagerAttributes attributes)
+        {
+            if (tags == null || tags.Length == 0)
+                return new object[] { attributes };
+
+            // ConfigDescription is expected to carry at most one ConfigurationManagerAttributes tag.
+            // If duplicate tags exist, collapse them into the refreshed instance.
+            var replaced = false;
+            var result = new List<object>(tags.Length);
+            foreach (var tag in tags)
+            {
+                if (tag is ConfigurationManagerAttributes)
+                {
+                    if (!replaced)
+                    {
+                        result.Add(attributes);
+                        replaced = true;
+                    }
+                }
+                else
+                    result.Add(tag);
+            }
+
+            if (!replaced)
+                result.Add(attributes);
+
+            return result.ToArray();
+        }
+
+        private static bool TrySetEntryDescription(ConfigEntryBase entry, ConfigDescription description)
+        {
+            var setter = AccessTools.PropertySetter(entry.GetType(), nameof(ConfigEntryBase.Description)) ??
+                         AccessTools.PropertySetter(typeof(ConfigEntryBase),
+                             nameof(ConfigEntryBase.Description));
+            if (setter != null)
+            {
+                setter.Invoke(entry, new object[] { description });
+                return true;
+            }
+
+            foreach (var fieldName in DescriptionFieldNames)
+            {
+                var field = AccessTools.Field(entry.GetType(), fieldName) ??
+                            AccessTools.Field(typeof(ConfigEntryBase), fieldName);
+                if (field == null || !typeof(ConfigDescription).IsAssignableFrom(field.FieldType))
+                    continue;
+
+                field.SetValue(entry, description);
+                return true;
+            }
+
+            return false;
         }
 
         private string Section { get; set; } = "general";
@@ -116,21 +265,31 @@ namespace ModUtils
             AcceptableValueBase acceptableValue = null,
             Action<ConfigurationManagerAttributes> initializer = null)
         {
+            L10N.EnsurePatched();
+
+            var defaultCategory = GetSection(section);
+            var defaultDispName = GetName(section, key);
             var attributes = new ConfigurationManagerAttributes
             {
-                Category = GetSection(section),
+                Category = defaultCategory,
                 Order = order,
-                DispName = GetName(section, key),
+                DispName = defaultDispName,
                 CustomDrawer = ConfigurationCustomDrawer.Get(typeof(T), acceptableValue)
             };
             initializer?.Invoke(attributes);
 
-            var description = string.IsNullOrEmpty(attributes.Description)
+            var categoryManaged = string.Equals(attributes.Category, defaultCategory, StringComparison.Ordinal);
+            var dispNameManaged = string.Equals(attributes.DispName, defaultDispName, StringComparison.Ordinal);
+            var descriptionManaged = string.IsNullOrEmpty(attributes.Description);
+            var description = descriptionManaged
                 ? GetDescription(section, key)
                 : attributes.Description;
+            attributes.Description = description;
 
             var configEntry = _config.Bind(section, key, defaultValue,
                 new ConfigDescription(description, acceptableValue, attributes));
+            RegisterLocalizedEntry(configEntry, _localization, section, key, attributes, categoryManaged,
+                dispNameManaged, descriptionManaged);
 
             if (!(_logger is null)) LogConfigEntry(configEntry, attributes);
             return configEntry;

@@ -19,26 +19,10 @@ namespace ModUtils
         private const string RemoveKey = "@config_button_remove";
 
         private static readonly Dictionary<IsMatchConfig, CustomDrawerSupplier> CustomDrawers;
+        private static bool _defaultTranslationsInitialized;
 
         static ConfigurationCustomDrawer()
         {
-            var translations = Reflections.GetField<Dictionary<string, string>>(Localization.instance, "m_translations");
-            var translationKey = L10N.GetTranslationKey(L10NPrefix, EnabledKey);
-            if (!translations.ContainsKey(translationKey))
-                translations.Add(translationKey, "Enabled");
-
-            translationKey = L10N.GetTranslationKey(L10NPrefix, DisabledKey);
-            if (!translations.ContainsKey(translationKey))
-                translations.Add(translationKey, "Disabled");
-
-            translationKey = L10N.GetTranslationKey(L10NPrefix, AddKey);
-            if (!translations.ContainsKey(translationKey))
-                translations.Add(translationKey, "Add");
-
-            translationKey = L10N.GetTranslationKey(L10NPrefix, RemoveKey);
-            if (!translations.ContainsKey(translationKey))
-                translations.Add(translationKey, "Remove");
-
             CustomDrawers = new Dictionary<IsMatchConfig, CustomDrawerSupplier>
             {
                 { IsBool, () => Bool },
@@ -46,6 +30,54 @@ namespace ModUtils
                 { IsStringList, StringList },
                 { IsFlagsEnum, () => Flags }
             };
+        }
+
+        private static void EnsureDefaultTranslations()
+        {
+            if (_defaultTranslationsInitialized) return;
+
+            _defaultTranslationsInitialized = TryAddDefaultTranslations();
+        }
+
+        internal static void RefreshDefaultTranslations()
+        {
+            _defaultTranslationsInitialized = false;
+            _defaultTranslationsInitialized = TryAddDefaultTranslations();
+            if (!_defaultTranslationsInitialized)
+                UnityEngine.Debug.LogWarning(
+                    "[ModUtils] Failed to refresh custom drawer fallback translations for the current language.");
+        }
+
+        private static bool TryAddDefaultTranslations()
+        {
+            global::Localization localization;
+            try
+            {
+                localization = global::Localization.instance;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+
+            if (localization == null) return false;
+
+            var translations =
+                Reflections.GetField<Dictionary<string, string>>(localization, "m_translations");
+            if (translations == null) return false;
+
+            AddTranslation(EnabledKey, "Enabled");
+            AddTranslation(DisabledKey, "Disabled");
+            AddTranslation(AddKey, "Add");
+            AddTranslation(RemoveKey, "Remove");
+            return true;
+
+            void AddTranslation(string key, string value)
+            {
+                var translationKey = L10N.GetTranslationKey(L10NPrefix, key);
+                if (!translations.ContainsKey(translationKey))
+                    translations.Add(translationKey, value);
+            }
         }
 
         private static bool IsBool(Type type, AcceptableValueBase acceptableValue)
@@ -60,16 +92,22 @@ namespace ModUtils
 
         private static bool IsStringList(Type type, AcceptableValueBase acceptableValue)
         {
-            return type == typeof(float) && acceptableValue is AcceptableValueRange<float>;
+            return type == typeof(StringList);
         }
 
-        private static bool IsFlagsEnum(Type type, AcceptableValueBase acceptableValue)
+        private static bool HasFlagsAttribute(Type type)
         {
             return type.IsEnum && type.GetCustomAttributes(typeof(FlagsAttribute), false).Any();
         }
 
+        private static bool IsFlagsEnum(Type type, AcceptableValueBase acceptableValue)
+        {
+            return HasFlagsAttribute(type);
+        }
+
         public static void Bool(ConfigEntryBase entry)
         {
+            EnsureDefaultTranslations();
             var @bool = (bool)entry.BoxedValue;
             var text = L10N.Translate(L10NPrefix, @bool ? EnabledKey : DisabledKey);
             var result = GUILayout.Toggle(@bool, text, GUILayout.ExpandWidth(true));
@@ -111,6 +149,7 @@ namespace ModUtils
             var inputText = "";
             return entry =>
             {
+                EnsureDefaultTranslations();
                 var guiWidth = Mathf.Min(Screen.width, 650);
                 var maxWidth = guiWidth - Mathf.RoundToInt(guiWidth / 2.5f) - 115;
                 var addButtonText = L10N.Translate(L10NPrefix, AddKey);
@@ -185,7 +224,7 @@ namespace ModUtils
                 var value = Convert.ToInt64(@enum);
                 if (value == 0) continue;
 
-                var label = GetFlagsLabel(flagsType, @enum);
+                var label = GetEnumLabel(flagsType, @enum);
 
                 var width =
                     Mathf.FloorToInt(GUI.skin.toggle.CalcSize(new GUIContent(label + "_")).x);
@@ -211,14 +250,6 @@ namespace ModUtils
 
             GUILayout.EndVertical();
             GUILayout.FlexibleSpace();
-
-            string GetFlagsLabel(Type type, object @object)
-            {
-                var member = type.GetMember(Enum.GetName(type, @object) ?? "").FirstOrDefault();
-                var attribute = member?.GetCustomAttributes(typeof(DescriptionAttribute), false)
-                                      .OfType<DescriptionAttribute>().FirstOrDefault();
-                return attribute?.Description ?? @object.ToString();
-            }
         }
 
         public static Action<ConfigEntryBase> MultiSelect<T>(
@@ -256,7 +287,7 @@ namespace ModUtils
                 {
                     if (validator != null && !validator.IsValid(element)) continue;
 
-                    var label = labelGenerator(element);
+                    var label = labelGenerator(element) ?? element.ToString();
 
                     var width =
                         Mathf.FloorToInt(GUI.skin.toggle.CalcSize(new GUIContent(label + "_")).x);
@@ -299,6 +330,14 @@ namespace ModUtils
             return CustomDrawers.Where(x => x.Key.Invoke(type, acceptableValue))
                                 .Select(x => x.Value.Invoke())
                                 .FirstOrDefault();
+        }
+
+        private static string GetEnumLabel(Type type, object @object)
+        {
+            var member = type.GetMember(Enum.GetName(type, @object) ?? "").FirstOrDefault();
+            var attribute = member?.GetCustomAttributes(typeof(DescriptionAttribute), false)
+                                  .OfType<DescriptionAttribute>().FirstOrDefault();
+            return attribute?.Description ?? @object.ToString();
         }
 
         public delegate bool IsMatchConfig(Type type, AcceptableValueBase acceptableValue);
