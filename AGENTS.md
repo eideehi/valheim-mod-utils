@@ -9,13 +9,11 @@
 - A local Valheim installation
 - A local BepInEx installation inside the Valheim directory
 
-The project resolves game references from the Valheim install directory. Set one of these environment variables before building:
+The project resolves game references from the Valheim install directory. Set the following environment variable before building:
 
 - `VALHEIM_DIR`: absolute path to the Valheim root directory that contains `valheim_Data/Managed`
-- `VALHEIM_DIRECTORY`: same as `VALHEIM_DIR`
-- `STEAM_GAME_DIR`: either the Valheim root directory, or a Steam library directory that contains `Valheim/valheim_Data/Managed`
 
-On Windows, if none of the variables above are set, the project also tries to locate Valheim from the Steam uninstall registry key.
+On Windows, if `VALHEIM_DIR` is not set, the project also tries to locate Valheim from the Steam uninstall registry key.
 
 The expected directory shape is:
 
@@ -47,14 +45,12 @@ If your environment prefers the .NET SDK entry point, `dotnet msbuild` can be us
 - Release output: `ModUtils/bin/Release/ModUtils.dll`
 
 ## Release repack
-Release builds optionally import `ILRepack.Lib.MSBuild.Task` from `../packages/ILRepack.Lib.MSBuild.Task.2.0.18.2/...`.
+Release builds use `ILRepack.Lib.MSBuild.Task` via `<PackageReference>` in the csproj (`GeneratePathProperty="true"`).
 
-- If the package is available, the `ILRepacker` target runs after build and rewrites the final assembly in place.
+- If the package is restored, the `ILRepacker` target runs after build and rewrites the final assembly in place.
 - If the package is missing, the Release build does not fail; it logs that standalone repack was skipped.
-
-`packages.config` currently contains only this optional ILRepack package, so package restore is only needed if you want the repack step.
 
 ## Troubleshooting
 - If assembly references fail, verify that the chosen Valheim directory really contains `valheim_Data/Managed`.
 - If BepInEx references fail, verify that `BepInEx/core/0Harmony.dll` and `BepInEx/core/BepInEx.dll` exist under the same Valheim directory.
-- If Release build succeeds but no repack happens, restore the ILRepack package into `../packages`.
+- If Release build succeeds but no repack happens, run `dotnet restore` to restore the ILRepack NuGet package.
