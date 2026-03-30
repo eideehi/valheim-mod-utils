@@ -6,27 +6,49 @@ namespace ModUtils
 {
     public static class Inventories
     {
+        private static bool IsMatchedItem(ItemDrop.ItemData data, string name, float worldLevel,
+            int quality, bool isPrefabName)
+        {
+            if (data == null) return false;
+
+            var matchedName = isPrefabName
+                ? data.m_dropPrefab != null && data.m_dropPrefab.name == name
+                : data.m_shared.m_name == name;
+            return matchedName &&
+                   (quality < 0 || data.m_quality == quality) &&
+                   (float)data.m_worldLevel == worldLevel;
+        }
+
+        private static int CountItems(Inventory inventory, string name, float worldLevel, int quality,
+            bool isPrefabName = false)
+        {
+            return GetItems(inventory, name, worldLevel, quality, isPrefabName).Sum(x => x.m_stack);
+        }
+
         public static IEnumerable<ItemDrop.ItemData> GetItems(Inventory inventory, string name,
-            int quality = -1, bool isPrefabName = false)
+            float worldLevel, int quality = -1, bool isPrefabName = false)
         {
             return inventory.GetAllItems()
                             .Where(data =>
-                                (isPrefabName
-                                    ? data.m_dropPrefab.name == name
-                                    : data.m_shared.m_name == name) &&
-                                (quality < 0 || data.m_quality == quality));
+                                IsMatchedItem(data, name, worldLevel, quality, isPrefabName))
+                            .ToList();
         }
 
         public static int AddItem(Inventory inventory, GameObject prefab, int amount, int quality = -1)
         {
+            if (amount <= 0) return 0;
+
             var data = prefab.GetComponent<ItemDrop>().m_itemData.Clone();
             data.m_dropPrefab = prefab;
             data.m_stack = Mathf.Min(amount, data.m_shared.m_maxStackSize);
             data.m_quality = Mathf.Clamp(quality, 1, data.m_shared.m_maxQuality);
+            if (Game.instance != null)
+                data.m_worldLevel = Game.m_worldLevel;
 
-            var count = inventory.CountItems(data.m_shared.m_name, quality);
+            var count = CountItems(inventory, data.m_shared.m_name, data.m_worldLevel, data.m_quality);
             inventory.AddItem(data);
-            return inventory.CountItems(data.m_shared.m_name, quality) - count;
+            return CountItems(inventory, data.m_shared.m_name, data.m_worldLevel, data.m_quality) -
+                   count;
         }
 
         public static int FillFreeStackSpace(Inventory from, Inventory to, string name, float worldLevel, int amount,
@@ -38,8 +60,8 @@ namespace ModUtils
             if (remain == 0) return 0;
 
             var fillCount = 0;
-            var toInventoryItems = GetItems(to, name, quality, isPrefabName).ToList();
-            foreach (var fromInventoryItem in GetItems(from, name, quality, isPrefabName))
+            var toInventoryItems = GetItems(to, name, worldLevel, quality, isPrefabName);
+            foreach (var fromInventoryItem in GetItems(from, name, worldLevel, quality, isPrefabName))
             foreach (var toInventoryItem in toInventoryItems)
             {
                 if (toInventoryItem.m_stack >= toInventoryItem.m_shared.m_maxStackSize)
@@ -70,14 +92,15 @@ namespace ModUtils
             return fillCount;
         }
 
-        public static int FillFreeStackSpace(Inventory inventory, string name, int amount,
+        public static int FillFreeStackSpace(Inventory inventory, string name, float worldLevel,
+            int amount,
             int quality = -1, bool isPrefabName = false)
         {
             if (amount <= 0) return 0;
 
             var remain = amount;
             var fillCount = 0;
-            foreach (var item in GetItems(inventory, name, quality, isPrefabName))
+            foreach (var item in GetItems(inventory, name, worldLevel, quality, isPrefabName))
             {
                 if (item.m_stack >= item.m_shared.m_maxStackSize)
                     continue;
@@ -97,11 +120,14 @@ namespace ModUtils
             return fillCount;
         }
 
-        public static bool HaveItem(Inventory inventory, string name, int amount, int quality = -1,
+        public static bool HaveItem(Inventory inventory, string name, float worldLevel, int amount,
+            int quality = -1,
             bool isPrefabName = false)
         {
+            if (amount <= 0) return true;
+
             var totalCount = 0;
-            foreach (var item in GetItems(inventory, name, quality, isPrefabName))
+            foreach (var item in GetItems(inventory, name, worldLevel, quality, isPrefabName))
             {
                 totalCount += item.m_stack;
                 if (totalCount >= amount) return true;
@@ -110,13 +136,14 @@ namespace ModUtils
             return false;
         }
 
-        public static int RemoveItem(Inventory inventory, string name, int amount, int quality = -1,
+        public static int RemoveItem(Inventory inventory, string name, float worldLevel, int amount,
+            int quality = -1,
             bool isPrefabName = false)
         {
             if (amount <= 0) return 0;
 
             var removeCount = 0;
-            foreach (var item in GetItems(inventory, name, quality, isPrefabName))
+            foreach (var item in GetItems(inventory, name, worldLevel, quality, isPrefabName))
             {
                 var count = Mathf.Min(amount, item.m_stack);
                 item.m_stack -= count;
