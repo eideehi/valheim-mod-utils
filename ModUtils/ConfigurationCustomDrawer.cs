@@ -21,6 +21,34 @@ namespace ModUtils
         private static readonly Dictionary<IsMatchConfig, CustomDrawerSupplier> CustomDrawers;
         private static bool _defaultTranslationsInitialized;
 
+        private static readonly Dictionary<string, Dictionary<string, string>> BuiltinDrawerTranslations =
+            new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                {
+                    "English", new Dictionary<string, string>
+                    {
+                        { EnabledKey, "Enabled" },
+                        { DisabledKey, "Disabled" },
+                        { AddKey, "Add" },
+                        { RemoveKey, "Remove" }
+                    }
+                },
+                {
+                    "Japanese", new Dictionary<string, string>
+                    {
+                        { EnabledKey, "\u6709\u52B9" },
+                        { DisabledKey, "\u7121\u52B9" },
+                        { AddKey, "\u8FFD\u52A0" },
+                        { RemoveKey, "\u524A\u9664" }
+                    }
+                }
+            };
+
+        private static readonly Dictionary<string, Dictionary<string, string>> CustomDrawerTranslations =
+            new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+
+        private static readonly Dictionary<string, string> OwnedDefaults = new Dictionary<string, string>();
+
         static ConfigurationCustomDrawer()
         {
             CustomDrawers = new Dictionary<IsMatchConfig, CustomDrawerSupplier>
@@ -30,6 +58,20 @@ namespace ModUtils
                 { IsStringList, StringList },
                 { IsFlagsEnum, () => Flags }
             };
+        }
+
+        public static void RegisterDefaultDrawerTranslation(string language, string key, string value)
+        {
+            if (!CustomDrawerTranslations.TryGetValue(language, out var translations))
+            {
+                translations = new Dictionary<string, string>();
+                CustomDrawerTranslations[language] = translations;
+            }
+
+            translations[key] = value;
+
+            if (_defaultTranslationsInitialized)
+                RefreshDefaultTranslations();
         }
 
         private static void EnsureDefaultTranslations()
@@ -46,6 +88,28 @@ namespace ModUtils
             if (!_defaultTranslationsInitialized)
                 UnityEngine.Debug.LogWarning(
                     "[ModUtils] Failed to refresh custom drawer fallback translations for the current language.");
+        }
+
+        private static Dictionary<string, string> ResolveDrawerTranslations(string language)
+        {
+            var result = new Dictionary<string, string>(BuiltinDrawerTranslations["English"]);
+
+            if (CustomDrawerTranslations.TryGetValue("English", out var englishCustom))
+                foreach (var kvp in englishCustom)
+                    result[kvp.Key] = kvp.Value;
+
+            if (!string.Equals(language, "English", StringComparison.OrdinalIgnoreCase))
+            {
+                if (BuiltinDrawerTranslations.TryGetValue(language, out var langBuiltin))
+                    foreach (var kvp in langBuiltin)
+                        result[kvp.Key] = kvp.Value;
+
+                if (CustomDrawerTranslations.TryGetValue(language, out var langCustom))
+                    foreach (var kvp in langCustom)
+                        result[kvp.Key] = kvp.Value;
+            }
+
+            return result;
         }
 
         private static bool TryAddDefaultTranslations()
@@ -66,18 +130,40 @@ namespace ModUtils
                 Reflections.GetField<Dictionary<string, string>>(localization, "m_translations");
             if (translations == null) return false;
 
-            AddTranslation(EnabledKey, "Enabled");
-            AddTranslation(DisabledKey, "Disabled");
-            AddTranslation(AddKey, "Add");
-            AddTranslation(RemoveKey, "Remove");
-            return true;
-
-            void AddTranslation(string key, string value)
+            string language;
+            try
             {
-                var translationKey = L10N.GetTranslationKey(L10NPrefix, key);
-                if (!translations.ContainsKey(translationKey))
-                    translations.Add(translationKey, value);
+                language = localization.GetSelectedLanguage();
             }
+            catch (Exception)
+            {
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(language))
+                language = "English";
+
+            var drawerTranslations = ResolveDrawerTranslations(language);
+
+            foreach (var kvp in drawerTranslations)
+            {
+                var translationKey = L10N.GetTranslationKey(L10NPrefix, kvp.Key);
+
+                if (translations.TryGetValue(translationKey, out var existing))
+                {
+                    if (OwnedDefaults.TryGetValue(translationKey, out var previous) &&
+                        existing == previous)
+                        translations[translationKey] = kvp.Value;
+                }
+                else
+                {
+                    translations[translationKey] = kvp.Value;
+                }
+
+                OwnedDefaults[translationKey] = kvp.Value;
+            }
+
+            return true;
         }
 
         private static bool IsBool(Type type, AcceptableValueBase acceptableValue)

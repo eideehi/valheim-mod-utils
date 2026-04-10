@@ -12,6 +12,8 @@ namespace ModUtils
         private static readonly ConditionalWeakTable<Component, ZNetView> ZNetViewCache;
         private static readonly ConditionalWeakTable<Component, string> NameCache;
 
+        private const string HoverableMarker = "\x01HOVERABLE";
+
         static Objects()
         {
             ZNetViewCache = new ConditionalWeakTable<Component, ZNetView>();
@@ -27,24 +29,56 @@ namespace ModUtils
         {
             if (!component) return "";
 
-            if (NameCache.TryGetValue(component, out var name)) return name;
-
-            name = component.GetType()
-                            .GetFields(AccessTools.all)
-                            .Where(x => x.Name == "m_name" && x.FieldType == typeof(string))
-                            .Select(x => x.GetValue(component) as string)
-                            .FirstOrDefault();
-
-            if (string.IsNullOrEmpty(name))
+            if (NameCache.TryGetValue(component, out var cached))
             {
-                var hoverable = component.GetComponent<Hoverable>();
-                if (hoverable != null)
-                    name = hoverable is HoverText text ? text.m_text : hoverable.GetHoverName();
+                if (ReferenceEquals(cached, HoverableMarker))
+                {
+                    var h = component.GetComponent<Hoverable>();
+                    var hoverName = h != null ? h.GetHoverName() : null;
+                    return !string.IsNullOrEmpty(hoverName)
+                        ? hoverName
+                        : Utils.GetPrefabName(component.gameObject);
+                }
 
-                if (string.IsNullOrEmpty(name))
-                    name = Utils.GetPrefabName(component.gameObject);
+                return cached;
             }
 
+            var name = component.GetType()
+                                .GetFields(AccessTools.all)
+                                .Where(x => x.Name == "m_name" && x.FieldType == typeof(string))
+                                .Select(x => x.GetValue(component) as string)
+                                .FirstOrDefault();
+
+            if (!string.IsNullOrEmpty(name))
+            {
+                NameCache.Add(component, name);
+                return name;
+            }
+
+            var hoverable = component.GetComponent<Hoverable>();
+            if (hoverable != null)
+            {
+                if (hoverable is HoverText text)
+                {
+                    name = text.m_text;
+                    if (!string.IsNullOrEmpty(name))
+                    {
+                        NameCache.Add(component, name);
+                        return name;
+                    }
+                }
+                else
+                {
+                    name = hoverable.GetHoverName();
+                    if (!string.IsNullOrEmpty(name))
+                    {
+                        NameCache.Add(component, HoverableMarker);
+                        return name;
+                    }
+                }
+            }
+
+            name = Utils.GetPrefabName(component.gameObject);
             NameCache.Add(component, name);
             return name;
         }

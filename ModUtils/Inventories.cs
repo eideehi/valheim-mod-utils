@@ -1,13 +1,40 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
 namespace ModUtils
 {
+    public enum WorldLevelMatchMode
+    {
+        Exact,
+        CurrentOrHigher,
+        Ignore
+    }
+
     public static class Inventories
     {
+        public static float CurrentWorldLevel =>
+            Game.instance != null ? Game.m_worldLevel : 0f;
+
+        private static bool IsWorldLevelMatch(ItemDrop.ItemData data, float worldLevel,
+            WorldLevelMatchMode matchMode)
+        {
+            switch (matchMode)
+            {
+                case WorldLevelMatchMode.Exact:
+                    return (float)data.m_worldLevel == worldLevel;
+                case WorldLevelMatchMode.CurrentOrHigher:
+                    return (float)data.m_worldLevel >= CurrentWorldLevel;
+                case WorldLevelMatchMode.Ignore:
+                    return true;
+                default:
+                    return (float)data.m_worldLevel == worldLevel;
+            }
+        }
+
         private static bool IsMatchedItem(ItemDrop.ItemData data, string name, float worldLevel,
-            int quality, bool isPrefabName)
+            int quality, bool isPrefabName, WorldLevelMatchMode matchMode)
         {
             if (data == null) return false;
 
@@ -16,23 +43,47 @@ namespace ModUtils
                 : data.m_shared.m_name == name;
             return matchedName &&
                    (quality < 0 || data.m_quality == quality) &&
-                   (float)data.m_worldLevel == worldLevel;
+                   IsWorldLevelMatch(data, worldLevel, matchMode);
+        }
+
+        /// <summary>
+        /// Centralizes the single remaining reflection dependency on private Inventory.Changed().
+        /// Used only for to-side stack additions where no public API alternative exists.
+        /// </summary>
+        private static void NotifyChanged(Inventory inventory)
+        {
+            Reflections.InvokeMethod(inventory, "Changed");
         }
 
         private static int CountItems(Inventory inventory, string name, float worldLevel, int quality,
-            bool isPrefabName = false)
+            bool isPrefabName = false, WorldLevelMatchMode matchMode = WorldLevelMatchMode.Exact)
         {
-            return GetItems(inventory, name, worldLevel, quality, isPrefabName).Sum(x => x.m_stack);
+            return GetItems(inventory, name, worldLevel, matchMode, quality, isPrefabName)
+                .Sum(x => x.m_stack);
         }
 
+        // ---- GetItems ----
+
         public static IEnumerable<ItemDrop.ItemData> GetItems(Inventory inventory, string name,
-            float worldLevel, int quality = -1, bool isPrefabName = false)
+            float worldLevel, WorldLevelMatchMode matchMode, int quality = -1,
+            bool isPrefabName = false)
         {
             return inventory.GetAllItems()
                             .Where(data =>
-                                IsMatchedItem(data, name, worldLevel, quality, isPrefabName))
+                                IsMatchedItem(data, name, worldLevel, quality, isPrefabName,
+                                    matchMode))
                             .ToList();
         }
+
+        [Obsolete("Use overload with WorldLevelMatchMode parameter")]
+        public static IEnumerable<ItemDrop.ItemData> GetItems(Inventory inventory, string name,
+            float worldLevel, int quality = -1, bool isPrefabName = false)
+        {
+            return GetItems(inventory, name, worldLevel, WorldLevelMatchMode.Exact, quality,
+                isPrefabName);
+        }
+
+        // ---- AddItem ----
 
         public static int AddItem(Inventory inventory, GameObject prefab, int amount, int quality = -1)
         {
@@ -51,8 +102,10 @@ namespace ModUtils
                    count;
         }
 
-        public static int FillFreeStackSpace(Inventory from, Inventory to, string name, float worldLevel, int amount,
-            int quality = -1, bool isPrefabName = false)
+        // ---- FillFreeStackSpace (two-inventory) ----
+
+        public static int FillFreeStackSpace(Inventory from, Inventory to, string name,
+            float worldLevel, int amount, int quality = -1, bool isPrefabName = false)
         {
             if (amount <= 0) return 0;
 
@@ -60,47 +113,46 @@ namespace ModUtils
             if (remain == 0) return 0;
 
             var fillCount = 0;
-            var toInventoryItems = GetItems(to, name, worldLevel, quality, isPrefabName);
-            foreach (var fromInventoryItem in GetItems(from, name, worldLevel, quality, isPrefabName))
+            var toInventoryItems =
+                GetItems(to, name, worldLevel, WorldLevelMatchMode.Exact, quality, isPrefabName);
+            foreach (var fromInventoryItem in GetItems(from, name, worldLevel,
+                         WorldLevelMatchMode.Exact, quality, isPrefabName))
             foreach (var toInventoryItem in toInventoryItems)
             {
                 if (toInventoryItem.m_stack >= toInventoryItem.m_shared.m_maxStackSize)
                     continue;
 
-                var count = Mathf.Min(Mathf.Min(remain, fromInventoryItem.m_stack),
+                var fromStack = fromInventoryItem.m_stack;
+                var count = Mathf.Min(Mathf.Min(remain, fromStack),
                     toInventoryItem.m_shared.m_maxStackSize - toInventoryItem.m_stack);
                 if (count == 0) continue;
 
                 toInventoryItem.m_stack += count;
                 fillCount += count;
-
-                fromInventoryItem.m_stack -= count;
                 remain -= count;
 
-                if (fromInventoryItem.m_stack == 0)
-                    from.RemoveItem(fromInventoryItem);
-                else
-                    Reflections.InvokeMethod(from, "Changed");
-
-                Reflections.InvokeMethod(to, "Changed");
+                from.RemoveItem(fromInventoryItem, count);
+                NotifyChanged(to);
 
                 if (remain == 0) goto LOOP_EXIT;
-                if (fromInventoryItem.m_stack == 0) break;
+                if (fromStack - count <= 0) break;
             }
 
         LOOP_EXIT: ;
             return fillCount;
         }
 
+        // ---- FillFreeStackSpace (single-inventory) ----
+
         public static int FillFreeStackSpace(Inventory inventory, string name, float worldLevel,
-            int amount,
-            int quality = -1, bool isPrefabName = false)
+            int amount, int quality = -1, bool isPrefabName = false)
         {
             if (amount <= 0) return 0;
 
             var remain = amount;
             var fillCount = 0;
-            foreach (var item in GetItems(inventory, name, worldLevel, quality, isPrefabName))
+            foreach (var item in GetItems(inventory, name, worldLevel, WorldLevelMatchMode.Exact,
+                         quality, isPrefabName))
             {
                 if (item.m_stack >= item.m_shared.m_maxStackSize)
                     continue;
@@ -112,7 +164,7 @@ namespace ModUtils
                 fillCount += count;
                 remain -= count;
 
-                Reflections.InvokeMethod(inventory, "Changed");
+                NotifyChanged(inventory);
 
                 if (remain == 0) break;
             }
@@ -120,14 +172,17 @@ namespace ModUtils
             return fillCount;
         }
 
-        public static bool HaveItem(Inventory inventory, string name, float worldLevel, int amount,
-            int quality = -1,
+        // ---- HaveItem ----
+
+        public static bool HaveItem(Inventory inventory, string name, float worldLevel,
+            WorldLevelMatchMode matchMode, int amount, int quality = -1,
             bool isPrefabName = false)
         {
             if (amount <= 0) return true;
 
             var totalCount = 0;
-            foreach (var item in GetItems(inventory, name, worldLevel, quality, isPrefabName))
+            foreach (var item in GetItems(inventory, name, worldLevel, matchMode, quality,
+                         isPrefabName))
             {
                 totalCount += item.m_stack;
                 if (totalCount >= amount) return true;
@@ -136,30 +191,44 @@ namespace ModUtils
             return false;
         }
 
-        public static int RemoveItem(Inventory inventory, string name, float worldLevel, int amount,
-            int quality = -1,
+        [Obsolete("Use overload with WorldLevelMatchMode parameter")]
+        public static bool HaveItem(Inventory inventory, string name, float worldLevel, int amount,
+            int quality = -1, bool isPrefabName = false)
+        {
+            return HaveItem(inventory, name, worldLevel, WorldLevelMatchMode.Exact, amount, quality,
+                isPrefabName);
+        }
+
+        // ---- RemoveItem ----
+
+        public static int RemoveItem(Inventory inventory, string name, float worldLevel,
+            WorldLevelMatchMode matchMode, int amount, int quality = -1,
             bool isPrefabName = false)
         {
             if (amount <= 0) return 0;
 
             var removeCount = 0;
-            foreach (var item in GetItems(inventory, name, worldLevel, quality, isPrefabName))
+            foreach (var item in GetItems(inventory, name, worldLevel, matchMode, quality,
+                         isPrefabName))
             {
                 var count = Mathf.Min(amount, item.m_stack);
-                item.m_stack -= count;
+                inventory.RemoveItem(item, count);
 
                 removeCount += count;
                 amount -= count;
-
-                if (item.m_stack == 0)
-                    inventory.RemoveItem(item);
-                else
-                    Reflections.InvokeMethod(inventory, "Changed");
 
                 if (amount == 0) break;
             }
 
             return removeCount;
+        }
+
+        [Obsolete("Use overload with WorldLevelMatchMode parameter")]
+        public static int RemoveItem(Inventory inventory, string name, float worldLevel, int amount,
+            int quality = -1, bool isPrefabName = false)
+        {
+            return RemoveItem(inventory, name, worldLevel, WorldLevelMatchMode.Exact, amount, quality,
+                isPrefabName);
         }
     }
 }
