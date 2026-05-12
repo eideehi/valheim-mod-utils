@@ -41,6 +41,7 @@ namespace ModUtils.SmokeTest
             var results = new List<CheckResult>
             {
                 RunCheck("csv_parse_line", CheckCsvParseLine),
+                RunCheck("csv_empty_and_whitespace_fields", CheckCsvEmptyAndWhitespaceFields),
                 RunCheck("csv_parse_document", CheckCsvParseDocument),
                 RunCheck("csv_escape_round_trip", CheckCsvEscapeRoundTrip),
                 RunCheck("string_list_config_converter", CheckStringListConfigConverter),
@@ -95,6 +96,28 @@ namespace ModUtils.SmokeTest
             return CheckResult.Pass();
         }
 
+        private CheckResult CheckCsvEmptyAndWhitespaceFields()
+        {
+            var preserved = Csv.ParseLine(" alpha ,,bravo, ");
+            Expect(preserved.SequenceEqual(new[] { " alpha ", "", "bravo", " " }),
+                "default CSV parsing should preserve unquoted whitespace and empty fields");
+
+            var trailingEmpty = Csv.ParseLine("alpha,");
+            Expect(trailingEmpty.SequenceEqual(new[] { "alpha", "" }),
+                "CSV parsing should preserve a trailing empty field");
+
+            var trimmed = Csv.ParseLine(" alpha ,\" bravo \", ", true);
+            Expect(trimmed.SequenceEqual(new[] { "alpha", " bravo ", "" }),
+                "trim mode should trim only unquoted fields");
+
+            var spacedQuoted = Csv.ParseLine(" alpha , \"bravo,charlie\", \" delta \" ", true);
+            Expect(spacedQuoted.SequenceEqual(new[] { "alpha", "bravo,charlie", " delta " }),
+                "trim mode should allow separator whitespace before quoted fields");
+
+            Expect(Csv.Escape(null) == "", "CSV escaping should tolerate null fields");
+            return CheckResult.Pass();
+        }
+
         private CheckResult CheckCsvParseDocument()
         {
             var records = Csv.Parse("a,b\r\n1,2\n\"3,3\",4");
@@ -124,7 +147,8 @@ namespace ModUtils.SmokeTest
             var serialized = TomlTypeConverter.ConvertToString(source, typeof(StringList));
             var parsed = (StringList)TomlTypeConverter.ConvertToValue(serialized, typeof(StringList));
 
-            Expect(parsed.Count == 3, "StringList count did not round-trip");
+            Expect(parsed.Count == 3,
+                $"StringList count did not round-trip; serialized=[{serialized}], count={parsed.Count}");
             Expect(parsed.Contains("alpha"), "StringList lost alpha");
             Expect(parsed.Contains("bravo,charlie"), "StringList lost comma-containing value");
             Expect(parsed.Contains(" delta "), "StringList lost quoted whitespace-preserving value");

@@ -37,7 +37,7 @@ Launch Valheim after deploying. The plugin logs individual smoke results and one
 summary line to the BepInEx log:
 
 ```text
-[ModUtils Smoke] Summary: total=8 passed=8 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
+[ModUtils Smoke] Summary: total=9 passed=9 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
 ```
 
 The smoke checks create temporary translation files only under

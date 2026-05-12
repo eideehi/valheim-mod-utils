@@ -53,6 +53,7 @@ namespace ModUtils
             private bool _fieldStarted;
             private bool _inQuotes;
             private bool _lastTokenWasDelimiter;
+            private bool _quotedFieldClosed;
             private int _offset;
 
             public Parser(string source, int offset = 0, bool trimUnquotedFields = false)
@@ -100,6 +101,7 @@ namespace ModUtils
                 _fieldStarted = false;
                 _inQuotes = false;
                 _lastTokenWasDelimiter = false;
+                _quotedFieldClosed = false;
 
                 var record = new List<string>();
                 var recordHasContent = false;
@@ -135,18 +137,22 @@ namespace ModUtils
                         else
                         {
                             _inQuotes = false;
+                            _quotedFieldClosed = true;
                         }
                     }
-                    else if (!_fieldStarted)
+                    else if (CanStartQuotedField())
                     {
                         _fieldQuoted = true;
                         _fieldStarted = true;
                         _inQuotes = true;
+                        _quotedFieldClosed = false;
+                        _fieldBuffer.Clear();
                     }
                     else
                     {
                         _fieldBuffer.Append(c);
                         _fieldStarted = true;
+                        _quotedFieldClosed = false;
                     }
 
                     _lastTokenWasDelimiter = false;
@@ -169,10 +175,33 @@ namespace ModUtils
                     return false;
                 }
 
+                if (_trimUnquotedFields && _fieldQuoted && _quotedFieldClosed &&
+                    char.IsWhiteSpace(c))
+                {
+                    _lastTokenWasDelimiter = false;
+                    return true;
+                }
+
                 recordHasContent = true;
                 _fieldBuffer.Append(c);
                 _fieldStarted = true;
+                _quotedFieldClosed = false;
                 _lastTokenWasDelimiter = false;
+                return true;
+            }
+
+            private bool CanStartQuotedField()
+            {
+                return !_fieldStarted ||
+                       _trimUnquotedFields && !_fieldQuoted && FieldBufferIsWhitespace();
+            }
+
+            private bool FieldBufferIsWhitespace()
+            {
+                for (var i = 0; i < _fieldBuffer.Length; i++)
+                    if (!char.IsWhiteSpace(_fieldBuffer[i]))
+                        return false;
+
                 return true;
             }
 
@@ -183,6 +212,7 @@ namespace ModUtils
                 _fieldBuffer.Clear();
                 _fieldQuoted = false;
                 _fieldStarted = false;
+                _quotedFieldClosed = false;
             }
         }
     }
