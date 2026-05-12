@@ -10,36 +10,56 @@ namespace ModUtils
 
         public static string Escape(string field)
         {
-            return field.IndexOfAny(MustQuoteChars) == -1
+            if (field == null) return "";
+
+            var mustQuote = field.Length == 0 ||
+                            field.IndexOfAny(MustQuoteChars) != -1 ||
+                            field.Length > 0 &&
+                            (char.IsWhiteSpace(field[0]) ||
+                             char.IsWhiteSpace(field[field.Length - 1]));
+
+            return !mustQuote
                 ? field
                 : $"\"{field.Replace("\"", "\"\"")}\"";
         }
 
         public static List<List<string>> Parse(string csv)
         {
-            return new Parser(csv).Parse();
+            return Parse(csv, false);
+        }
+
+        public static List<List<string>> Parse(string csv, bool trimUnquotedFields)
+        {
+            return new Parser(csv, 0, trimUnquotedFields).Parse();
         }
 
         public static List<string> ParseLine(string line)
         {
-            return new Parser(line).ParseLine();
+            return ParseLine(line, false);
+        }
+
+        public static List<string> ParseLine(string line, bool trimUnquotedFields)
+        {
+            return new Parser(line, 0, trimUnquotedFields).ParseLine();
         }
 
         public sealed class Parser
         {
-            private readonly int _end;
             private readonly StringBuilder _fieldBuffer;
             private readonly List<string> _recordBuffer;
             private readonly string _source;
+            private readonly bool _trimUnquotedFields;
+            private bool _fieldQuoted;
+            private bool _fieldStarted;
+            private bool _inQuotes;
+            private bool _lastTokenWasDelimiter;
             private int _offset;
-            private bool _quoted;
 
-            public Parser(string source, int offset = 0)
+            public Parser(string source, int offset = 0, bool trimUnquotedFields = false)
             {
-                _source = source;
-                _end = source.Length - 1;
+                _source = source ?? "";
                 _offset = offset;
-                _quoted = false;
+                _trimUnquotedFields = trimUnquotedFields;
                 _recordBuffer = new List<string>();
                 _fieldBuffer = new StringBuilder();
             }
@@ -76,17 +96,22 @@ namespace ModUtils
             {
                 _recordBuffer.Clear();
                 _fieldBuffer.Clear();
+                _fieldQuoted = false;
+                _fieldStarted = false;
+                _inQuotes = false;
+                _lastTokenWasDelimiter = false;
 
                 var record = new List<string>();
-                for (; _offset < _source.Length; _offset++)
+                var recordHasContent = false;
+                while (_offset < _source.Length)
                 {
-                    if (ParseChar(_source[_offset])) continue;
+                    var c = _source[_offset++];
+                    if (ParseChar(c, ref recordHasContent)) continue;
 
-                    _offset++;
                     break;
                 }
 
-                if (_fieldBuffer.Length > 0)
+                if (recordHasContent || _fieldStarted || _lastTokenWasDelimiter)
                     FlushField();
 
                 if (_recordBuffer.Count > 0)
@@ -95,78 +120,69 @@ namespace ModUtils
                 return record;
             }
 
-            private bool ParseChar(char c)
+            private bool ParseChar(char c, ref bool recordHasContent)
             {
-                while (true)
+                if (c == '"')
                 {
-                    if (c == '"')
+                    recordHasContent = true;
+                    if (_inQuotes)
                     {
-                        if (_quoted && _offset < _end)
+                        if (_offset < _source.Length && _source[_offset] == '"')
                         {
+                            _fieldBuffer.Append('"');
                             _offset++;
-                            var next = _source[_offset];
-                            if (next == '"')
-                            {
-                                _fieldBuffer.Append(next);
-                            }
-                            else
-                            {
-                                _quoted = false;
-                                c = next;
-                                continue;
-                            }
                         }
                         else
                         {
-                            _quoted = !_quoted && _offset < _end;
+                            _inQuotes = false;
                         }
                     }
-                    else if (c == ',')
+                    else if (!_fieldStarted)
                     {
-                        if (_quoted)
-                            _fieldBuffer.Append(c);
-                        else
-                            FlushField();
-                    }
-                    else if (c == '\r')
-                    {
-                        var nextIndex = Math.Min(_offset + 1, _end);
-                        if (_source[nextIndex] == '\n')
-                            _offset = nextIndex;
-
-                        if (!_quoted)
-                        {
-                            if (_fieldBuffer.Length > 0)
-                                FlushField();
-                            return false;
-                        }
-
-                        _fieldBuffer.Append('\n');
-                    }
-                    else if (c == '\n')
-                    {
-                        if (!_quoted)
-                        {
-                            if (_fieldBuffer.Length > 0)
-                                FlushField();
-                            return false;
-                        }
-
-                        _fieldBuffer.Append('\n');
+                        _fieldQuoted = true;
+                        _fieldStarted = true;
+                        _inQuotes = true;
                     }
                     else
                     {
                         _fieldBuffer.Append(c);
+                        _fieldStarted = true;
                     }
 
+                    _lastTokenWasDelimiter = false;
                     return true;
                 }
+
+                if (c == ',' && !_inQuotes)
+                {
+                    recordHasContent = true;
+                    FlushField();
+                    _lastTokenWasDelimiter = true;
+                    return true;
+                }
+
+                if ((c == '\r' || c == '\n') && !_inQuotes)
+                {
+                    if (c == '\r' && _offset < _source.Length && _source[_offset] == '\n')
+                        _offset++;
+
+                    return false;
+                }
+
+                recordHasContent = true;
+                _fieldBuffer.Append(c);
+                _fieldStarted = true;
+                _lastTokenWasDelimiter = false;
+                return true;
             }
 
             private void FlushField()
             {
-                _recordBuffer.Add(_fieldBuffer.ToString().Trim());
+                var field = _fieldBuffer.ToString();
+                _recordBuffer.Add(_trimUnquotedFields && !_fieldQuoted ? field.Trim() : field);
                 _fieldBuffer.Clear();
+                _fieldQuoted = false;
+                _fieldStarted = false;
             }
         }
     }

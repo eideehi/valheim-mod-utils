@@ -23,6 +23,7 @@ namespace ModUtils
         private static bool _setLanguagePatchApplied;
         private static bool _initializeMethodWarningLogged;
         private static bool _setLanguageMethodWarningLogged;
+        private static bool _localizationCacheWarningLogged;
         private static string _currentLanguage;
         private static readonly List<TranslationSource> _translationSources = new List<TranslationSource>();
 
@@ -230,8 +231,7 @@ namespace ModUtils
             foreach (var kvp in RuntimeWords)
             {
                 TranslationCache[kvp.Key] = kvp.Value;
-                if (localization != null)
-                    Reflections.InvokeMethod(localization, "AddWord", kvp.Key, kvp.Value);
+                AddWordToLocalization(localization, kvp.Key, kvp.Value);
             }
         }
 
@@ -271,8 +271,7 @@ namespace ModUtils
             foreach (var kvp in RuntimeWords)
             {
                 TranslationCache[kvp.Key] = kvp.Value;
-                if (localization != null)
-                    Reflections.InvokeMethod(localization, "AddWord", kvp.Key, kvp.Value);
+                AddWordToLocalization(localization, kvp.Key, kvp.Value);
             }
         }
 
@@ -340,6 +339,8 @@ namespace ModUtils
 
         private static string InvokeInsertWords(string text, string[] words)
         {
+            if (string.IsNullOrEmpty(text)) return text;
+
             var localization = TryGetLocalization();
             return localization != null
                 ? Reflections.InvokeMethod<string>(localization, "InsertWords", text, words)
@@ -350,9 +351,7 @@ namespace ModUtils
         {
             TranslationCache[key] = word;
 
-            var localization = TryGetLocalization();
-            if (localization != null)
-                Reflections.InvokeMethod(localization, "AddWord", key, word);
+            AddWordToLocalization(TryGetLocalization(), key, word);
         }
 
         private static void InvokeAddRuntimeWord(string key, string word)
@@ -360,9 +359,35 @@ namespace ModUtils
             RuntimeWords[key] = word;
             TranslationCache[key] = word;
 
-            var localization = TryGetLocalization();
-            if (localization != null)
-                Reflections.InvokeMethod(localization, "AddWord", key, word);
+            AddWordToLocalization(TryGetLocalization(), key, word);
+        }
+
+        private static void AddWordToLocalization(global::Localization localization, string key,
+            string word)
+        {
+            if (localization == null) return;
+
+            Reflections.InvokeMethod(localization, "AddWord", key, word);
+            EvictLocalizationCache(localization);
+        }
+
+        private static void EvictLocalizationCache(global::Localization localization)
+        {
+            try
+            {
+                var cache = Reflections.GetField<object>(localization, "m_cache");
+                if (cache == null) return;
+
+                Reflections.InvokeMethod(cache, "EvictAll");
+            }
+            catch (Exception e)
+            {
+                if (_localizationCacheWarningLogged) return;
+
+                UnityEngine.Debug.LogWarning(
+                    $"[ModUtils] Failed to evict Localization cache after adding a word. Game-localized text may stay stale until the next language reload. {e}");
+                _localizationCacheWarningLogged = true;
+            }
         }
 
         internal static string GetTranslationKey(string prefix, string internalName)
@@ -421,6 +446,8 @@ namespace ModUtils
         [SuppressMessage("ReSharper", "MemberCanBePrivate.Global")]
         public string Localize(string text)
         {
+            if (string.IsNullOrEmpty(text)) return text;
+
             var sb = new StringBuilder();
             var offset = 0;
             foreach (Match match in WordPattern.Matches(text))
@@ -435,20 +462,28 @@ namespace ModUtils
                 offset = groups[0].Index + groups[0].Value.Length;
             }
 
+            sb.Append(text.Substring(offset));
             return sb.ToString();
         }
 
         public string Localize(string text, params object[] args)
         {
+            var safeArgs = args ?? new object[0];
             return InvokeInsertWords(Localize(text),
-                Array.ConvertAll(args,
-                    arg => arg is string s ? TranslateInternalName(s) : arg.ToString()));
+                Array.ConvertAll(safeArgs,
+                    arg => arg == null
+                        ? ""
+                        : arg is string s
+                            ? TranslateInternalName(s)
+                            : arg.ToString()));
         }
 
         public string LocalizeTextOnly(string text, params object[] args)
         {
+            var safeArgs = args ?? new object[0];
             return InvokeInsertWords(Localize(text),
-                Array.ConvertAll(args, arg => arg as string ?? arg.ToString()));
+                Array.ConvertAll(safeArgs,
+                    arg => arg == null ? "" : arg as string ?? arg.ToString()));
         }
     }
 
@@ -542,6 +577,12 @@ namespace ModUtils
                 return false;
 
             _logger?.Debug($"Load translations: {path}");
+            if (json.translations == null)
+            {
+                _logger?.Warning($"Translation file does not contain translations: {path}");
+                return true;
+            }
+
             foreach (var translation in json.translations)
                 _localization.AddFileWord(translation.Key, translation.Value);
 

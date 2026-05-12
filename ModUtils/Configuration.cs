@@ -48,7 +48,7 @@ namespace ModUtils
                 {
                     ConvertToObject = (str, type) => string.IsNullOrEmpty(str)
                         ? new StringList()
-                        : new StringList(Csv.ParseLine(str)),
+                        : new StringList(Csv.ParseLine(str, true)),
                     ConvertToString = (obj, type) =>
                     {
                         var list = (StringList)obj;

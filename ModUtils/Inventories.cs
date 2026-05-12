@@ -62,6 +62,15 @@ namespace ModUtils
                 .Sum(x => x.m_stack);
         }
 
+        private static int FindFreeStackSpace(Inventory inventory, string name, float worldLevel,
+            int quality, bool isPrefabName)
+        {
+            return GetItems(inventory, name, worldLevel, WorldLevelMatchMode.Exact, quality,
+                    isPrefabName)
+                .Where(item => item.m_stack < item.m_shared.m_maxStackSize)
+                .Sum(item => item.m_shared.m_maxStackSize - item.m_stack);
+        }
+
         // ---- GetItems ----
 
         public static IEnumerable<ItemDrop.ItemData> GetItems(Inventory inventory, string name,
@@ -109,7 +118,8 @@ namespace ModUtils
         {
             if (amount <= 0) return 0;
 
-            var remain = Mathf.Min(amount, to.FindFreeStackSpace(name, worldLevel));
+            var remain = Mathf.Min(amount,
+                FindFreeStackSpace(to, name, worldLevel, quality, isPrefabName));
             if (remain == 0) return 0;
 
             var fillCount = 0;
