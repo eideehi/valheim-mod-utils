@@ -13,23 +13,31 @@ and `BepInEx/core`, then build the smoke-only solution explicitly:
 VALHEIM_DIR=/mnt/g/steam/steamapps/common/Valheim dotnet msbuild smoke/ModUtils.SmokeTest.sln /p:Configuration=Debug "/p:Platform=Any CPU"
 ```
 
-The default build writes only under `smoke/ModUtils.SmokeTest/bin/` and the
-referenced `ModUtils/bin/` output. It does not install anything into Valheim.
-
-## Deploy
-
-Deploy is opt-in. Pass `DeploySmoke=true` only when you want to copy the smoke
-plugin to the local Valheim BepInEx plugin directory:
+Debug builds automatically copy the smoke plugin to the local Valheim BepInEx
+plugin directory when `VALHEIM_DIR` points to a valid BepInEx Valheim install.
+Pass `DeploySmoke=false` to build without installing:
 
 ```bash
-VALHEIM_DIR=/mnt/g/steam/steamapps/common/Valheim dotnet msbuild smoke/ModUtils.SmokeTest.sln /p:Configuration=Debug "/p:Platform=Any CPU" /p:DeploySmoke=true
+VALHEIM_DIR=/mnt/g/steam/steamapps/common/Valheim dotnet msbuild smoke/ModUtils.SmokeTest.sln /p:Configuration=Debug "/p:Platform=Any CPU" /p:DeploySmoke=false
 ```
+
+## Deploy
 
 The deploy target writes only to:
 
 ```text
 <VALHEIM_DIR>/BepInEx/plugins/ModUtilsSmoke/
 ```
+
+Debug builds deploy automatically when the directory is available. Pass
+`DeploySmoke=true` when you want to force deployment for another configuration:
+
+```bash
+VALHEIM_DIR=/mnt/g/steam/steamapps/common/Valheim dotnet msbuild smoke/ModUtils.SmokeTest.sln /p:Configuration=Release "/p:Platform=Any CPU" /p:DeploySmoke=true
+```
+
+If `DeploySmoke=true` is set and the Valheim or BepInEx directory cannot be
+resolved, the build fails before copying files.
 
 ## Run And Logs
 

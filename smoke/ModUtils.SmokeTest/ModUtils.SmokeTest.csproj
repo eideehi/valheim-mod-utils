@@ -17,7 +17,12 @@
     <NoWarn>$(NoWarn);NU1701</NoWarn>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)' == 'Debug' And ('$(Platform)' == 'AnyCPU' Or '$(Platform)' == 'Any CPU')">
+  <PropertyGroup>
+    <NormalizedPlatform Condition="'$(Platform)' == 'Any CPU'">AnyCPU</NormalizedPlatform>
+    <NormalizedPlatform Condition="'$(NormalizedPlatform)' == ''">$(Platform)</NormalizedPlatform>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(NormalizedPlatform)' == 'Debug|AnyCPU'">
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
@@ -27,7 +32,7 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)' == 'Release' And ('$(Platform)' == 'AnyCPU' Or '$(Platform)' == 'Any CPU')">
+  <PropertyGroup Condition="'$(Configuration)|$(NormalizedPlatform)' == 'Release|AnyCPU'">
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
@@ -58,6 +63,7 @@
     <_TargetFrameworkDirectories Condition="'$(FrameworkPathOverride)' != ''">$(FrameworkPathOverride)</_TargetFrameworkDirectories>
     <_FullFrameworkReferenceAssemblyPaths Condition="'$(FrameworkPathOverride)' != ''">$(FrameworkPathOverride)</_FullFrameworkReferenceAssemblyPaths>
     <SmokeDeployDirectory>$(ValheimDirectory)\BepInEx\plugins\ModUtilsSmoke</SmokeDeployDirectory>
+    <DeploySmoke Condition="'$(DeploySmoke)' == '' And '$(ManagedDataDirectory)' != '' And '$(BepInExDirectory)' != '' And '$(Configuration)|$(NormalizedPlatform)' == 'Debug|AnyCPU'">true</DeploySmoke>
   </PropertyGroup>
 
   <ItemGroup>
@@ -113,8 +119,9 @@
     </Reference>
   </ItemGroup>
 
-  <Target Name="EnsureSmokeDeployDirectoryIsKnown" BeforeTargets="SmokeDeploy" Condition="'$(DeploySmoke)' == 'true' And '$(ValheimDirectory)' == ''">
-    <Error Text="DeploySmoke=true requires VALHEIM_DIR to point at a Valheim install containing valheim_Data\Managed." />
+  <Target Name="EnsureSmokeDeployDirectoryIsKnown" BeforeTargets="GetReferenceAssemblyPaths;Build;SmokeDeploy" Condition="'$(DeploySmoke)' == 'true'">
+    <Error Condition="'$(ValheimDirectory)' == '' Or '$(ManagedDataDirectory)' == ''" Text="DeploySmoke=true requires VALHEIM_DIR to point at a Valheim install containing valheim_Data\Managed." />
+    <Error Condition="'$(BepInExDirectory)' == ''" Text="DeploySmoke=true requires VALHEIM_DIR to point at a Valheim install containing BepInEx." />
   </Target>
 
   <Target Name="SmokeDeploy" AfterTargets="Build" Condition="'$(DeploySmoke)' == 'true'">
