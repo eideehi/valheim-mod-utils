@@ -1,0 +1,133 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    <Platform Condition="'$(Platform)' == ''">AnyCPU</Platform>
+    <Configurations>Debug;Release</Configurations>
+    <Platforms>AnyCPU</Platforms>
+    <ProjectGuid>{D1C753A0-7DDF-4C16-92FE-76A91D2F01AB}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <RootNamespace>ModUtils.SmokeTest</RootNamespace>
+    <AssemblyName>ModUtils.SmokeTest</AssemblyName>
+    <TargetFramework>net48</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AutomaticallyUseReferenceAssemblyPackages>false</AutomaticallyUseReferenceAssemblyPackages>
+    <SkipResolvePackageAssets>true</SkipResolvePackageAssets>
+    <ShouldUnsetParentConfigurationAndPlatform>false</ShouldUnsetParentConfigurationAndPlatform>
+    <NoWarn>$(NoWarn);NU1701</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug' And ('$(Platform)' == 'AnyCPU' Or '$(Platform)' == 'Any CPU')">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' And ('$(Platform)' == 'AnyCPU' Or '$(Platform)' == 'Any CPU')">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+
+  <Choose>
+    <When Condition="Exists('$(VALHEIM_DIR)\valheim_Data\Managed')">
+      <PropertyGroup>
+        <ValheimDirectory>$(VALHEIM_DIR)</ValheimDirectory>
+      </PropertyGroup>
+    </When>
+    <When Condition="'$(ValheimDirectory)' == '' And '$(OS)' == 'Windows_NT'">
+      <PropertyGroup>
+        <ValheimDirectory>$([MSBuild]::GetRegistryValueFromView('HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App 892970', 'InstallLocation', null, RegistryView.Registry64, RegistryView.Registry32))</ValheimDirectory>
+      </PropertyGroup>
+    </When>
+  </Choose>
+
+  <PropertyGroup>
+    <BepInExDirectory Condition="Exists('$(ValheimDirectory)\BepInEx')">$(ValheimDirectory)\BepInEx</BepInExDirectory>
+    <ManagedDataDirectory Condition="Exists('$(ValheimDirectory)\valheim_Data\Managed')">$(ValheimDirectory)\valheim_Data\Managed</ManagedDataDirectory>
+    <UnityManagedDirectory Condition="Exists('$(ValheimDirectory)\unstripped_corlib')">$(ValheimDirectory)\unstripped_corlib</UnityManagedDirectory>
+    <UnityManagedDirectory Condition="'$(UnityManagedDirectory)' == '' And Exists('$(ManagedDataDirectory)')">$(ManagedDataDirectory)</UnityManagedDirectory>
+    <FrameworkPathOverride Condition="'$(OS)' != 'Windows_NT' And '$(ManagedDataDirectory)' != ''">$(ManagedDataDirectory)</FrameworkPathOverride>
+    <_TargetFrameworkDirectories Condition="'$(FrameworkPathOverride)' != ''">$(FrameworkPathOverride)</_TargetFrameworkDirectories>
+    <_FullFrameworkReferenceAssemblyPaths Condition="'$(FrameworkPathOverride)' != ''">$(FrameworkPathOverride)</_FullFrameworkReferenceAssemblyPaths>
+    <SmokeDeployDirectory>$(ValheimDirectory)\BepInEx\plugins\ModUtilsSmoke</SmokeDeployDirectory>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\ModUtils\ModUtils.csproj">
+      <SetConfiguration>Configuration=$(Configuration)</SetConfiguration>
+      <SetPlatform>Platform=AnyCPU</SetPlatform>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup Label="BepInEx">
+    <Reference Include="0Harmony20">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(BepInExDirectory)\core\0Harmony.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="BepInEx">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(BepInExDirectory)\core\BepInEx.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup Label="Unity">
+    <Reference Include="UnityEngine">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UnityManagedDirectory)\UnityEngine.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UnityManagedDirectory)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup Label="Valheim">
+    <Reference Include="assembly_guiutils">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(ManagedDataDirectory)\assembly_guiutils.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="assembly_valheim">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(ManagedDataDirectory)\assembly_valheim.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup Label="Libraries">
+    <Reference Include="netstandard">
+      <HintPath>$(ManagedDataDirectory)\netstandard.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="EnsureSmokeDeployDirectoryIsKnown" BeforeTargets="SmokeDeploy" Condition="'$(DeploySmoke)' == 'true' And '$(ValheimDirectory)' == ''">
+    <Error Text="DeploySmoke=true requires VALHEIM_DIR to point at a Valheim install containing valheim_Data\Managed." />
+  </Target>
+
+  <Target Name="SmokeDeploy" AfterTargets="Build" Condition="'$(DeploySmoke)' == 'true'">
+    <ItemGroup>
+      <SmokeDeployFiles Include="$(TargetDir)$(AssemblyName).dll" />
+      <SmokeDeployFiles Include="$(TargetDir)$(AssemblyName).pdb" Condition="Exists('$(TargetDir)$(AssemblyName).pdb')" />
+      <SmokeDeployFiles Include="$(TargetDir)ModUtils.dll" />
+      <SmokeDeployFiles Include="$(TargetDir)ModUtils.pdb" Condition="Exists('$(TargetDir)ModUtils.pdb')" />
+      <SmokeDeployFiles Include="$(TargetDir)LitJSON.dll" Condition="Exists('$(TargetDir)LitJSON.dll')" />
+      <SmokeDeployFiles Include="$(TargetDir)LitJson.dll" Condition="Exists('$(TargetDir)LitJson.dll')" />
+    </ItemGroup>
+
+    <MakeDir Directories="$(SmokeDeployDirectory)" />
+    <Copy SourceFiles="@(SmokeDeployFiles)" DestinationFolder="$(SmokeDeployDirectory)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>
