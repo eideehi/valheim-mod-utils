@@ -1,3 +1,11 @@
+#### v1.0.5 [2026-05-13]
+- Fix localization utilities to preserve literal text around translated tokens and refresh runtime-added words after language changes
+- Fix inventory transfer helpers so prefab-name moves can fill compatible target stacks
+- Fix CSV parsing for empty fields, quoted commas, escaped quotes, and significant whitespace
+- Preserve StringList compatibility for existing comma-space separated config values
+- Add an isolated in-game smoke test mod with optional Debug deploy to BepInEx
+- Ignore local agent workspace files
+
 #### v1.0.4 [2026-04-10]
 - Add WorldLevelMatchMode enum to Inventories (Exact, CurrentOrHigher, Ignore)
 - Add CurrentWorldLevel property to Inventories for convenient access
