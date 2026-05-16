@@ -1,0 +1,50 @@
+name: Bug report
+description: Report a ModUtils library bug or broken behavior
+title: ""
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug.
+        A useful report includes what you expected, what you did, and what happened instead.
+        Logs and small reproduction examples are optional, but useful for library issues.
+        Questions, suggestions, and comments are handled on Discord.
+
+  - type: dropdown
+    id: version
+    attributes:
+      label: Library version
+      options:
+        - latest release
+        - older release
+        - development build / unknown
+    validations:
+      required: true
+
+  - type: textarea
+    id: bug-detail
+    attributes:
+      label: What did you expect, what did you do, and what happened?
+      description: At minimum, tell us what you expected, what you did, and what happened instead.
+      placeholder: |
+        Expected: I expected AAA to happen.
+        Did: I did BBB.
+        Happened: CCC happened instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction details
+      description: Optional. Include a small code sample, smoke test case, or steps.
+
+  - type: textarea
+    id: file-attachments
+    attributes:
+      label: Logs, screenshots, or examples
+      description: Optional. You can drag and drop files here if they help explain the issue.
+
+  - type: markdown
+    attributes:
+      value: Thank you for the report.

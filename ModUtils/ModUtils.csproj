@@ -15,7 +15,12 @@
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
+  <PropertyGroup>
+    <NormalizedPlatform Condition="'$(Platform)' == 'Any CPU'">AnyCPU</NormalizedPlatform>
+    <NormalizedPlatform Condition="'$(NormalizedPlatform)' == ''">$(Platform)</NormalizedPlatform>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(NormalizedPlatform)' == 'Debug|AnyCPU'">
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
@@ -26,7 +31,7 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|AnyCPU'">
+  <PropertyGroup Condition="'$(Configuration)|$(NormalizedPlatform)' == 'Release|AnyCPU'">
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
@@ -55,6 +60,8 @@
     <UnityManagedDirectory Condition="Exists('$(ValheimDirectory)\unstripped_corlib')">$(ValheimDirectory)\unstripped_corlib</UnityManagedDirectory>
     <UnityManagedDirectory Condition="'$(UnityManagedDirectory)' == '' And Exists('$(ManagedDataDirectory)')">$(ManagedDataDirectory)</UnityManagedDirectory>
     <FrameworkPathOverride Condition="'$(OS)' != 'Windows_NT' And '$(ManagedDataDirectory)' != ''">$(ManagedDataDirectory)</FrameworkPathOverride>
+    <_TargetFrameworkDirectories Condition="'$(FrameworkPathOverride)' != ''">$(FrameworkPathOverride)</_TargetFrameworkDirectories>
+    <_FullFrameworkReferenceAssemblyPaths Condition="'$(FrameworkPathOverride)' != ''">$(FrameworkPathOverride)</_FullFrameworkReferenceAssemblyPaths>
     <ILRepackTargetsFile>$(MSBuildProjectDirectory)/ILRepack.targets</ILRepackTargetsFile>
     <ILRepackTargetsPath Condition="'$(PkgILRepack_Lib_MSBuild_Task)' != ''">$(PkgILRepack_Lib_MSBuild_Task)\build\ILRepack.Lib.MSBuild.Task.targets</ILRepackTargetsPath>
   </PropertyGroup>
@@ -216,9 +223,9 @@
     </Reference>
   </ItemGroup>
 
-  <Import Project="$(ILRepackTargetsPath)" Condition="'$(Configuration)|$(Platform)' == 'Release|AnyCPU' And Exists('$(ILRepackTargetsPath)')" />
+  <Import Project="$(ILRepackTargetsPath)" Condition="'$(Configuration)|$(NormalizedPlatform)' == 'Release|AnyCPU' And Exists('$(ILRepackTargetsPath)')" />
 
-  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild" Condition="'$(Configuration)|$(Platform)' == 'Release|AnyCPU'">
-    <Message Condition="!Exists('$(ILRepackTargetsPath)')" Text="ILRepack targets were not found. Standalone ModUtils release repack is being skipped." Importance="Low" />
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild" Condition="'$(Configuration)|$(NormalizedPlatform)' == 'Release|AnyCPU'">
+    <Error Condition="'$(ILRepackTargetsPath)' == '' Or !Exists('$(ILRepackTargetsPath)')" Text="ILRepack targets were not found. Run dotnet restore before building Release." />
   </Target>
 </Project>

@@ -7,18 +7,18 @@ root-level MSBuild files or production project settings.
 ## Build
 
 Set `VALHEIM_DIR` to a local Valheim install that contains `valheim_Data/Managed`
-and `BepInEx/core`, then build the smoke-only solution explicitly:
+and `BepInEx/core`, then run the root build wrapper:
 
 ```bash
-VALHEIM_DIR=/mnt/g/steam/steamapps/common/Valheim dotnet msbuild smoke/ModUtils.SmokeTest.sln /p:Configuration=Debug "/p:Platform=Any CPU"
+scripts/build.sh smoke Debug
 ```
 
-Debug builds automatically copy the smoke plugin to the local Valheim BepInEx
-plugin directory when `VALHEIM_DIR` points to a valid BepInEx Valheim install.
-Pass `DeploySmoke=false` to build without installing:
+The default Debug smoke build copies the smoke plugin to the local Valheim
+BepInEx plugin directory when `VALHEIM_DIR` points to a valid install.
+Pass `no-deploy` to build without installing:
 
 ```bash
-VALHEIM_DIR=/mnt/g/steam/steamapps/common/Valheim dotnet msbuild smoke/ModUtils.SmokeTest.sln /p:Configuration=Debug "/p:Platform=Any CPU" /p:DeploySmoke=false
+scripts/build.sh smoke Debug no-deploy
 ```
 
 ## Deploy
@@ -29,17 +29,17 @@ The deploy target writes only to:
 <VALHEIM_DIR>/BepInEx/plugins/ModUtilsSmoke/
 ```
 
-Debug builds deploy automatically when the directory is available. Pass
-`DeploySmoke=true` when you want to force deployment for another configuration:
+Debug smoke builds deploy automatically when the directory is available. Pass
+`deploy` to force deployment for another configuration:
 
 ```bash
-VALHEIM_DIR=/mnt/g/steam/steamapps/common/Valheim dotnet msbuild smoke/ModUtils.SmokeTest.sln /p:Configuration=Release "/p:Platform=Any CPU" /p:DeploySmoke=true
+scripts/build.sh smoke Release deploy
 ```
 
-If `DeploySmoke=true` is set and the Valheim or BepInEx directory cannot be
-resolved, the build fails before copying files.
+If deploy is enabled and the Valheim or BepInEx directory cannot be resolved,
+the build fails before copying files.
 
-## Run And Logs
+## Run and logs
 
 Launch Valheim after deploying. The plugin logs individual smoke results and one
 summary line to the BepInEx log:
@@ -56,9 +56,9 @@ The smoke checks create temporary translation files only under
 To uninstall the smoke plugin, remove the dedicated deploy directory:
 
 ```bash
-rm -r /mnt/g/steam/steamapps/common/Valheim/BepInEx/plugins/ModUtilsSmoke
+rm -r "$VALHEIM_DIR/BepInEx/plugins/ModUtilsSmoke"
 ```
 
-The smoke project is optional developer tooling. Repositories that consume this
-repository as a submodule should continue to build the root solution unless they
-explicitly choose to scan nested project files under submodules.
+The smoke project is optional developer tooling. Repositories that consume
+ModUtils as a submodule should continue to build the root solution unless they
+explicitly scan nested project files under submodules.
