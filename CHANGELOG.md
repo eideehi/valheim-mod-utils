@@ -1,3 +1,6 @@
+#### v1.0.6 [2026-05-30]
+- Add CustomHotkeyDrawer support to the bundled ConfigurationManagerAttributes so settings can poll keyboard input
+
 #### v1.0.5 [2026-05-13]
 - Fix localization utilities to preserve literal text around translated tokens and refresh runtime-added words after language changes
 - Fix inventory transfer helpers so prefab-name moves can fill compatible target stacks
