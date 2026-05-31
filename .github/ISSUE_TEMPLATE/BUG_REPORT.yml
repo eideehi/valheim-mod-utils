@@ -1,6 +1,5 @@
 name: Bug report
 description: Report a ModUtils library bug or broken behavior
-title: ""
 body:
   - type: markdown
     attributes:
