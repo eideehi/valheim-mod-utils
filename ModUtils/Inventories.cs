@@ -49,10 +49,14 @@ namespace ModUtils
         /// <summary>
         /// Centralizes the single remaining reflection dependency on private Inventory.Changed().
         /// Used only for to-side stack additions where no public API alternative exists.
+        /// Inventory.Changed takes (bool success, bool cheatedStateChanged) with both defaulting
+        /// to false; passing them explicitly (rather than no arguments) is required so Traverse
+        /// resolves the exact overload by argument type instead of an empty-parameter lookup,
+        /// and it makes a future signature change throw instead of silently doing nothing.
         /// </summary>
         private static void NotifyChanged(Inventory inventory)
         {
-            Reflections.InvokeMethod(inventory, "Changed");
+            Reflections.InvokeMethod(inventory, "Changed", false, false);
         }
 
         private static int CountItems(Inventory inventory, string name, float worldLevel, int quality,
