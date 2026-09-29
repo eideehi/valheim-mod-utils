@@ -1,3 +1,6 @@
+#### v1.0.7 [2026-09-29]
+- Fix Inventories stack-fill helpers so the inventory change notification is sent on Valheim 1.0 (Inventory.Changed now takes two bool arguments); this requires Valheim 1.0 or later
+
 #### v1.0.6 [2026-05-30]
 - Add CustomHotkeyDrawer support to the bundled ConfigurationManagerAttributes so settings can poll keyboard input
 
