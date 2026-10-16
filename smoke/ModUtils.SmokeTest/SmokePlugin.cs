@@ -12,12 +12,27 @@ using UnityEngine;
 namespace ModUtils.SmokeTest
 {
     [BepInPlugin("net.eideehi.modutils.smoke", "ModUtils Smoke Test", "0.1.0")]
-    public sealed class SmokePlugin : BaseUnityPlugin
+    public sealed partial class SmokePlugin : BaseUnityPlugin
     {
         private const float RuntimeWaitSeconds = 20f;
         private const string SmokeDirectoryName = "ModUtilsSmoke";
 
+        private SettingsGuiSample _guiSample;
         private bool _hasRun;
+
+        private void Awake()
+        {
+            try
+            {
+                _guiSample = new SettingsGuiSample(Config);
+                ConfigurationGui.Register(this);
+            }
+            catch (Exception e)
+            {
+                _guiSample = null;
+                Logger.LogError($"[ModUtils Smoke] Failed to set up the sample configuration: {e}");
+            }
+        }
 
         private IEnumerator Start()
         {
@@ -30,14 +45,16 @@ namespace ModUtils.SmokeTest
                    Time.realtimeSinceStartup - start < RuntimeWaitSeconds)
                 yield return new WaitForSeconds(0.5f);
 
-            RunSmokeChecksOnce();
-        }
-
-        private void RunSmokeChecksOnce()
-        {
-            if (_hasRun) return;
+            if (_hasRun) yield break;
             _hasRun = true;
 
+            var results = RunSmokeChecks();
+            yield return StartCoroutine(RunSettingsGuiChecks(results));
+            LogSummary(results);
+        }
+
+        private List<CheckResult> RunSmokeChecks()
+        {
             var results = new List<CheckResult>
             {
                 RunCheck("csv_parse_line", CheckCsvParseLine),
@@ -52,15 +69,24 @@ namespace ModUtils.SmokeTest
             };
 
             foreach (var result in results)
-            {
-                if (result.Status == CheckStatus.Pass)
-                    Logger.LogInfo($"[ModUtils Smoke] PASS {result.Name}");
-                else if (result.Status == CheckStatus.Skip)
-                    Logger.LogWarning($"[ModUtils Smoke] SKIP {result.Name}: {result.Message}");
-                else
-                    Logger.LogError($"[ModUtils Smoke] FAIL {result.Name}: {result.Message}");
-            }
+                Report(result);
 
+            return results;
+        }
+
+        private CheckResult Report(CheckResult result)
+        {
+            if (result.Status == CheckStatus.Pass)
+                Logger.LogInfo($"[ModUtils Smoke] PASS {result.Name}");
+            else if (result.Status == CheckStatus.Skip)
+                Logger.LogWarning($"[ModUtils Smoke] SKIP {result.Name}: {result.Message}");
+            else
+                Logger.LogError($"[ModUtils Smoke] FAIL {result.Name}: {result.Message}");
+            return result;
+        }
+
+        private void LogSummary(List<CheckResult> results)
+        {
             var failed = results.Where(result => result.Status == CheckStatus.Fail)
                                 .Select(result => result.Name)
                                 .ToArray();
@@ -287,12 +313,16 @@ namespace ModUtils.SmokeTest
             return itemData;
         }
 
-        private static string CreateSmokeTempDirectory(string purpose)
+        private static string GetSmokeBaseDirectory()
         {
-            var baseDirectory = string.IsNullOrEmpty(Paths.ConfigPath)
+            return string.IsNullOrEmpty(Paths.ConfigPath)
                 ? Path.Combine(Path.GetTempPath(), SmokeDirectoryName)
                 : Path.Combine(Paths.ConfigPath, SmokeDirectoryName);
-            var directory = Path.Combine(baseDirectory, purpose,
+        }
+
+        private static string CreateSmokeTempDirectory(string purpose)
+        {
+            var directory = Path.Combine(GetSmokeBaseDirectory(), purpose,
                 DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture));
             Directory.CreateDirectory(directory);
             return directory;

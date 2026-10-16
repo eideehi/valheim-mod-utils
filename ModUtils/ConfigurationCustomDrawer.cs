@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using BepInEx.Configuration;
 using UnityEngine;
 
@@ -48,6 +49,9 @@ namespace ModUtils
             new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
 
         private static readonly Dictionary<string, string> OwnedDefaults = new Dictionary<string, string>();
+
+        private static readonly ConditionalWeakTable<Action<ConfigEntryBase>, object> MultiSelectSources =
+            new ConditionalWeakTable<Action<ConfigEntryBase>, object>();
 
         static ConfigurationCustomDrawer()
         {
@@ -342,7 +346,7 @@ namespace ModUtils
             Func<IEnumerable<T>> allElementSupplier, Func<T, string> labelGenerator)
             where T : IComparable<T>
         {
-            return entry =>
+            Action<ConfigEntryBase> drawer = entry =>
             {
                 var guiWidth = Mathf.Min(Screen.width, 650);
                 var maxWidth = guiWidth - Mathf.RoundToInt(guiWidth / 2.5f) - 115;
@@ -404,6 +408,34 @@ namespace ModUtils
                 GUILayout.EndVertical();
                 GUILayout.FlexibleSpace();
             };
+
+            // The in-game config screen rebuilds this selection natively from the same two functions.
+            MultiSelectSources.Add(drawer, new MultiSelectSource<T>(allElementSupplier, labelGenerator));
+            return drawer;
+        }
+
+        /// <summary>
+        /// Finds the functions a <see cref="MultiSelect{T}"/> drawer was created with.
+        /// </summary>
+        internal static bool TryGetMultiSelectSource<T>(Action<ConfigEntryBase> drawer,
+            out Func<IEnumerable<T>> allElementSupplier, out Func<T, string> labelGenerator)
+        {
+            if (drawer != null && MultiSelectSources.TryGetValue(drawer, out var source) &&
+                source is MultiSelectSource<T> typed)
+            {
+                allElementSupplier = typed.AllElementSupplier;
+                labelGenerator = typed.LabelGenerator;
+                return true;
+            }
+
+            allElementSupplier = null;
+            labelGenerator = null;
+            return false;
+        }
+
+        internal static bool IsMultiSelect(Action<ConfigEntryBase> drawer)
+        {
+            return drawer != null && MultiSelectSources.TryGetValue(drawer, out _);
         }
 
         public static void Register(IsMatchConfig matcher, CustomDrawerSupplier supplier)
@@ -429,5 +461,18 @@ namespace ModUtils
         public delegate bool IsMatchConfig(Type type, AcceptableValueBase acceptableValue);
 
         public delegate Action<ConfigEntryBase> CustomDrawerSupplier();
+
+        private sealed class MultiSelectSource<T>
+        {
+            internal MultiSelectSource(Func<IEnumerable<T>> allElementSupplier, Func<T, string> labelGenerator)
+            {
+                AllElementSupplier = allElementSupplier;
+                LabelGenerator = labelGenerator;
+            }
+
+            internal Func<IEnumerable<T>> AllElementSupplier { get; }
+
+            internal Func<T, string> LabelGenerator { get; }
+        }
     }
 }
