@@ -24,6 +24,8 @@ namespace ModUtils.SmokeTest
         {
             try
             {
+                // The editors must be registered before the plugin, and the types converted before binding.
+                SettingsGuiCustomEditors.Register();
                 _guiSample = new SettingsGuiSample(Config);
                 ConfigurationGui.Register(this);
             }

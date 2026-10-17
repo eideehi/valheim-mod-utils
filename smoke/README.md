@@ -45,10 +45,12 @@ Launch Valheim after deploying. The plugin logs individual smoke results and one
 summary line to the BepInEx log:
 
 ```text
-[ModUtils Smoke] Summary: total=23 passed=23 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
+[ModUtils Smoke] Summary: total=33 passed=33 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
 ```
 
-The plugin also registers sample entries for the in-game config screen. Once the
+The plugin also registers sample entries for the in-game config screen, including
+entries of its own types with the editors it registers (two of them fail on
+purpose, so their error lines in the log are expected). Once the
 main menu is shown, it opens the Settings screen by itself, drives the Mods tab
 and its panel, and closes Settings again; leave the game alone until the summary
 line appears. These `settings_gui_*` checks are skipped when the main menu does
@@ -57,8 +59,10 @@ not appear within a minute.
 The smoke checks create temporary translation files only under
 `BepInEx/config/ModUtilsSmoke/` and clean them up on a best-effort basis. The
 config screen checks save `settings-gui-list.png`, `settings-gui-panel.png` (the
-top of the panel) and `settings-gui-panel-bottom.png` (the panel scrolled to its
-bottom with the multi-select list expanded) under
+top of the panel with the search line, and the footer),
+`settings-gui-panel-bottom.png` (the panel scrolled to its bottom with the
+multi-select list expanded) and `settings-gui-discard-prompt.png` (the prompt
+that Back shows while changes are not applied) under
 `BepInEx/config/ModUtilsSmoke/ui/` and keep them for review.
 
 ## Remove

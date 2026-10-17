@@ -257,7 +257,7 @@ namespace ModUtils
                     }
 
                     var toggle = Clone(template, line, "Item");
-                    LayOutGridItem(toggle, template, style, labels[index]);
+                    LayOutToggleItem(toggle, template, style, labels[index]);
                     AddLayout(toggle.gameObject, preferredWidth: 0f, preferredHeight: itemHeight,
                         flexibleWidth: 1f);
                     toggles.Add(toggle);
@@ -268,11 +268,11 @@ namespace ModUtils
         }
 
         /// <summary>
-        /// Puts the box of a grid toggle at the cell's left edge and its label inside the cell, right of
-        /// the box. The vanilla toggle draws its label outside its own rect, left of the box, where it
-        /// would cover the row name.
+        /// Puts the box of a copied toggle at the cell's left edge and its label inside the cell, right of
+        /// the box, and returns that label (null when the toggle has none). The vanilla toggle draws its
+        /// label outside its own rect, left of the box, where it would cover the row name.
         /// </summary>
-        private static void LayOutGridItem(Toggle toggle, Toggle template, TMP_Text style, string label)
+        internal static TMP_Text LayOutToggleItem(Toggle toggle, Toggle template, TMP_Text style, string label)
         {
             var boxWidth = 0f;
             var box = toggle.targetGraphic != null ? toggle.targetGraphic.rectTransform : null;
@@ -320,8 +320,10 @@ namespace ModUtils
                 text.overflowMode = TextOverflowModes.Ellipsis;
                 text.alignment = TextAlignmentOptions.MidlineLeft;
                 text.text = label;
-                break;
+                return text;
             }
+
+            return null;
         }
 
         /// <summary>
@@ -375,7 +377,11 @@ namespace ModUtils
         internal static TextMeshProUGUI CreateText(Transform parent, string name, TMP_Text style,
             float sizeScale = 1f)
         {
-            var text = CreateRect(name, parent).gameObject.AddComponent<TextMeshProUGUI>();
+            // A text added to an active object looks for TextMeshPro's default font at once, which the game
+            // does not ship, so the font is set before the object becomes active.
+            var gameObject = CreateRect(name, parent).gameObject;
+            gameObject.SetActive(false);
+            var text = gameObject.AddComponent<TextMeshProUGUI>();
             if (style != null)
             {
                 text.font = style.font;
@@ -389,8 +395,10 @@ namespace ModUtils
             text.overflowMode = TextOverflowModes.Ellipsis;
             text.alignment = TextAlignmentOptions.MidlineLeft;
             text.raycastTarget = false;
+            gameObject.SetActive(true);
             return text;
         }
+
 
         internal static void SetLabel(Component component, string label)
         {

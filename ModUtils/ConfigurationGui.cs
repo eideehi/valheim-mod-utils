@@ -21,7 +21,13 @@ namespace ModUtils
         internal const string ModsTabKey = "@config_gui_mods_tab";
         internal const string BackKey = "@config_gui_back";
         internal const string ResetKey = "@config_gui_reset";
-        internal const string ApplyHintKey = "@config_gui_apply_hint";
+        internal const string StagedApplyHintKey = "@config_gui_staged_apply_hint";
+        internal const string ResetAllKey = "@config_gui_reset_all";
+        internal const string ApplyKey = "@config_gui_apply";
+        internal const string DiscardHeaderKey = "@config_gui_discard_header";
+        internal const string DiscardQuestionKey = "@config_gui_discard_question";
+        internal const string SearchPlaceholderKey = "@config_gui_search";
+        internal const string ShowAdvancedKey = "@config_gui_show_advanced";
         internal const string ReadOnlyKey = "@config_gui_read_only";
         internal const string PressKeyKey = "@config_gui_press_key";
         internal const string ClearKey = "@config_gui_clear";
@@ -40,6 +46,10 @@ namespace ModUtils
 
         private static readonly List<ConfigurationGuiPlugin> Plugins = new List<ConfigurationGuiPlugin>();
 
+        private static readonly List<KeyValuePair<ConfigurationCustomDrawer.IsMatchConfig,
+            Func<ConfigurationGuiCustomEditor>>> CustomEditors =
+            new List<KeyValuePair<ConfigurationCustomDrawer.IsMatchConfig, Func<ConfigurationGuiCustomEditor>>>();
+
         private static readonly Dictionary<string, Dictionary<string, string>> DefaultTranslations =
             new Dictionary<string, Dictionary<string, string>>
             {
@@ -49,7 +59,13 @@ namespace ModUtils
                         { ModsTabKey, "Mods" },
                         { BackKey, "Back" },
                         { ResetKey, "Reset" },
-                        { ApplyHintKey, "Changes are applied immediately." },
+                        { StagedApplyHintKey, "Changes are saved when you press Apply." },
+                        { ResetAllKey, "Reset all" },
+                        { ApplyKey, "Apply" },
+                        { DiscardHeaderKey, "Unsaved changes" },
+                        { DiscardQuestionKey, "Discard the changes that are not applied and go back?" },
+                        { SearchPlaceholderKey, "Search" },
+                        { ShowAdvancedKey, "Show advanced settings" },
                         { ReadOnlyKey, "Read-only" },
                         { PressKeyKey, "Press a key..." },
                         { ClearKey, "Clear" }
@@ -62,8 +78,20 @@ namespace ModUtils
                         { BackKey, "\u623B\u308B" },
                         { ResetKey, "\u30EA\u30BB\u30C3\u30C8" },
                         {
-                            ApplyHintKey,
-                            "\u5909\u66F4\u306F\u3059\u3050\u306B\u9069\u7528\u3055\u308C\u307E\u3059\u3002"
+                            StagedApplyHintKey,
+                            "\u5909\u66F4\u306F\u300C\u78BA\u5B9A\u300D\u3092\u62BC\u3059\u3068\u4FDD\u5B58\u3055\u308C\u307E\u3059\u3002"
+                        },
+                        { ResetAllKey, "\u3059\u3079\u3066\u521D\u671F\u5024\u306B\u623B\u3059" },
+                        { ApplyKey, "\u78BA\u5B9A" },
+                        { DiscardHeaderKey, "\u672A\u78BA\u5B9A\u306E\u5909\u66F4" },
+                        {
+                            DiscardQuestionKey,
+                            "\u78BA\u5B9A\u3057\u3066\u3044\u306A\u3044\u5909\u66F4\u3092\u7834\u68C4\u3057\u3066\u623B\u308A\u307E\u3059\u304B\uFF1F"
+                        },
+                        { SearchPlaceholderKey, "\u691C\u7D22" },
+                        {
+                            ShowAdvancedKey,
+                            "\u4E0A\u7D1A\u8005\u5411\u3051\u306E\u8A2D\u5B9A\u3092\u8868\u793A"
                         },
                         { ReadOnlyKey, "\u8AAD\u307F\u53D6\u308A\u5C02\u7528" },
                         { PressKeyKey, "\u30AD\u30FC\u3092\u62BC\u3057\u3066\u304F\u3060\u3055\u3044..." },
@@ -77,8 +105,9 @@ namespace ModUtils
 
         /// <summary>
         /// Lists the plugin on the "Mods" tab that is added to the vanilla Settings screen, where its
-        /// <see cref="BaseUnityPlugin.Config"/> entries can be edited. Every change is written to the
-        /// entry immediately. Calling this again for the same plugin GUID does nothing.
+        /// <see cref="BaseUnityPlugin.Config"/> entries can be edited. Changes stay pending in the panel
+        /// and are written to the entries when Apply is pressed. Calling this again for the same plugin
+        /// GUID does nothing.
         /// </summary>
         /// <remarks>
         /// Call it once from the plugin's <c>Awake</c>. The first call patches <c>Settings.Awake</c> with
@@ -98,6 +127,62 @@ namespace ModUtils
                 plugin.Config));
             RegisterTranslations();
             ApplyPatch(metadata.GUID);
+        }
+
+        /// <summary>
+        /// Shows entries of the types that <paramref name="matcher"/> accepts with editors made by
+        /// <paramref name="factory"/>, in the panels of the plugins that this copy of ModUtils registered.
+        /// Registered editors are consulted before the built-in ones, and the last registration whose
+        /// matcher accepts an entry wins.
+        /// </summary>
+        /// <remarks>
+        /// Register before the Settings screen opens; a panel picks its editors when it opens. The matcher
+        /// receives the entry's setting type and acceptable values. The factory must return a new editor
+        /// for every call, because each row gets its own. When the matcher, the factory or the editor's
+        /// <c>Build</c> throws, the row shows the value read-only and the error is logged.
+        /// </remarks>
+        /// <param name="matcher">Decides which entries the editor is for.</param>
+        /// <param name="factory">Creates one editor for one row.</param>
+        public static void RegisterEditor(ConfigurationCustomDrawer.IsMatchConfig matcher,
+            Func<ConfigurationGuiCustomEditor> factory)
+        {
+            if (matcher == null) throw new ArgumentNullException(nameof(matcher));
+            if (factory == null) throw new ArgumentNullException(nameof(factory));
+
+            CustomEditors.Add(
+                new KeyValuePair<ConfigurationCustomDrawer.IsMatchConfig, Func<ConfigurationGuiCustomEditor>>(
+                    matcher, factory));
+        }
+
+        /// <summary>
+        /// Creates the registered editor for the entry, or null when no registration matches. False when a
+        /// matcher or the factory threw; the error is logged.
+        /// </summary>
+        internal static bool TryCreateCustomEditor(ConfigEntryBase entry, string pluginName,
+            out ConfigurationGuiCustomEditor editor)
+        {
+            editor = null;
+            try
+            {
+                var type = entry.SettingType;
+                var acceptableValues = entry.Description?.AcceptableValues;
+                for (var i = CustomEditors.Count - 1; i >= 0; i--)
+                {
+                    if (!CustomEditors[i].Key(type, acceptableValues)) continue;
+
+                    editor = CustomEditors[i].Value();
+                    break;
+                }
+
+                return true;
+            }
+            catch (Exception e)
+            {
+                var definition = entry.Definition;
+                UnityEngine.Debug.LogError(
+                    $"[ModUtils] Failed to create the registered editor for [{definition.Section}:{definition.Key}] of {pluginName}: {e}");
+                return false;
+            }
         }
 
         internal static string Translate(string key)

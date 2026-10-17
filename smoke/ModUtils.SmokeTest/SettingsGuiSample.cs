@@ -25,7 +25,8 @@ namespace ModUtils.SmokeTest
 
     /// <summary>
     /// Entries that the smoke plugin shows on the in-game config screen: one per editor kind, plus
-    /// hidden, advanced, read-only and self-correcting entries.
+    /// hidden, advanced, read-only and self-correcting entries, and entries of the plugin's own types
+    /// that use the editors it registers.
     /// </summary>
     internal sealed class SettingsGuiSample
     {
@@ -33,9 +34,11 @@ namespace ModUtils.SmokeTest
         private const string EditorsSection = "editors";
         private const string KeysAndListsSection = "keys_and_lists";
         private const string VisibilitySection = "visibility";
-        private const string EditorsCategory = "Editors";
-        private const string KeysAndListsCategory = "Keys and lists";
+        private const string CustomSection = "custom";
+        internal const string EditorsCategory = "Editors";
+        internal const string KeysAndListsCategory = "Keys and lists";
         private const string VisibilityCategory = "Read-only and hidden";
+        private const string CustomCategory = "Custom editors";
 
         private static readonly string[] Materials =
             { "Wood", "Stone", "Flint", "Resin", "Feathers", "Leather scraps" };
@@ -93,20 +96,37 @@ namespace ModUtils.SmokeTest
             ReadOnlyToggleEntry = configuration.Bind(VisibilitySection, "read_only_toggle", true,
                 initializer: Describe(VisibilityCategory, "Locked toggle", "A bool entry marked read-only.",
                     attributes => attributes.ReadOnly = true));
-            var hidden = configuration.Bind(VisibilitySection, "hidden_text", "hidden",
+            HiddenEntry = configuration.Bind(VisibilitySection, "hidden_text", "hidden",
                 initializer: Describe(VisibilityCategory, "Hidden text", "Never shown on the config screen.",
                     attributes => attributes.Browsable = false));
-            var advanced = configuration.Bind(VisibilitySection, "advanced_number", 1,
+            AdvancedEntry = configuration.Bind(VisibilitySection, "advanced_number", 1,
                 initializer: Describe(VisibilityCategory, "Advanced number",
-                    "An advanced entry. The config screen hides it.",
+                    "An advanced entry. The config screen shows it only with advanced settings shown.",
                     attributes => attributes.IsAdvanced = true));
+
+            var words = new[] { "Wood", "Stone" };
+            WordListEntry = configuration.Bind(CustomSection, "word_list", new SampleWordList(words),
+                initializer: Describe(CustomCategory, "Custom words",
+                    "A list of words, edited by the sample editor that the smoke plugin registers."));
+            LockedWordListEntry = configuration.Bind(CustomSection, "locked_word_list", new SampleWordList(words),
+                initializer: Describe(CustomCategory, "Locked custom words",
+                    "The same kind of list, marked read-only.", attributes => attributes.ReadOnly = true));
+            BrokenFactoryEntry = configuration.Bind(CustomSection, "broken_factory",
+                new SampleBrokenFactoryValue("factory sample"),
+                initializer: Describe(CustomCategory, "Editor that cannot be created",
+                    "Its registered editor factory fails, so the row shows the value read-only."));
+            BrokenBuildEntry = configuration.Bind(CustomSection, "broken_build",
+                new SampleBrokenBuildValue("build sample"),
+                initializer: Describe(CustomCategory, "Editor that fails to build",
+                    "Its registered editor fails while building, so the row shows the value read-only."));
 
             VisibleEntries = new List<ConfigEntryBase>
             {
                 ToggleEntry, intSlider, floatSlider, intText, nonNegative, text, colorCode, ChoiceEntry, flags,
-                shortcut, key, multiSelect, plainList, ColorEntry, ReadOnlyToggleEntry
+                shortcut, key, multiSelect, plainList, ColorEntry, ReadOnlyToggleEntry, WordListEntry,
+                LockedWordListEntry, BrokenFactoryEntry, BrokenBuildEntry
             };
-            AllEntries = VisibleEntries.Concat(new ConfigEntryBase[] { hidden, advanced }).ToList();
+            AllEntries = VisibleEntries.Concat(new ConfigEntryBase[] { HiddenEntry, AdvancedEntry }).ToList();
         }
 
         internal ConfigEntry<bool> ToggleEntry { get; }
@@ -117,8 +137,21 @@ namespace ModUtils.SmokeTest
 
         internal ConfigEntry<bool> ReadOnlyToggleEntry { get; }
 
+        internal ConfigEntry<string> HiddenEntry { get; }
+
+        internal ConfigEntry<int> AdvancedEntry { get; }
+
+        internal ConfigEntry<SampleWordList> WordListEntry { get; }
+
+        internal ConfigEntry<SampleWordList> LockedWordListEntry { get; }
+
+        internal ConfigEntry<SampleBrokenFactoryValue> BrokenFactoryEntry { get; }
+
+        internal ConfigEntry<SampleBrokenBuildValue> BrokenBuildEntry { get; }
+
         /// <summary>
-        /// Entries the config screen must list; the hidden and the advanced entry are not among them.
+        /// Entries the config screen lists with an empty search and advanced settings not shown; the
+        /// hidden and the advanced entry are not among them.
         /// </summary>
         internal IList<ConfigEntryBase> VisibleEntries { get; }
 

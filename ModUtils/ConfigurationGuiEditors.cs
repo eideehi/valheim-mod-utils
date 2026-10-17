@@ -25,6 +25,16 @@ namespace ModUtils
         protected ConfigEntryBase Entry { get; }
 
         /// <summary>
+        /// The value the editor shows and builds on: the panel's pending value, else the entry's.
+        /// </summary>
+        protected object Value => Pending.Get(Entry);
+
+        /// <summary>
+        /// The open panel's pending values, which the editor stages its changes in.
+        /// </summary>
+        private protected ConfigurationGuiPendingValues Pending { get; private set; }
+
+        /// <summary>
         /// False when the editor can only display the value.
         /// </summary>
         internal virtual bool IsEditable => true;
@@ -36,10 +46,35 @@ namespace ModUtils
         internal float LineHeight { get; private protected set; }
 
         /// <summary>
-        /// Picks the editor for an entry. Types without an editor get a read-only row.
+        /// Picks the editor for an entry, which stages its changes in <paramref name="pending"/>: an editor
+        /// registered by a mod first, then a built-in one. Types without an editor, and entries whose
+        /// registered editor could not be created, get a read-only row.
         /// </summary>
-        internal static ConfigurationGuiEditor Create(ConfigEntryBase entry, ConfigurationGuiTemplates templates)
+        internal static ConfigurationGuiEditor Create(ConfigEntryBase entry, ConfigurationGuiPendingValues pending,
+            ConfigurationGuiTemplates templates)
         {
+            var editor = Select(entry, pending.PluginName, templates);
+            editor.Pending = pending;
+            return editor;
+        }
+
+        /// <summary>
+        /// The editor shown for an entry whose own editor failed.
+        /// </summary>
+        internal static ConfigurationGuiEditor CreateReadOnly(ConfigEntryBase entry,
+            ConfigurationGuiPendingValues pending)
+        {
+            return new ConfigurationGuiReadOnlyEditor(entry) { Pending = pending };
+        }
+
+        private static ConfigurationGuiEditor Select(ConfigEntryBase entry, string pluginName,
+            ConfigurationGuiTemplates templates)
+        {
+            if (!ConfigurationGui.TryCreateCustomEditor(entry, pluginName, out var customEditor))
+                return new ConfigurationGuiReadOnlyEditor(entry);
+            if (customEditor != null)
+                return new ConfigurationGuiCustomEditorHost(entry, customEditor);
+
             var type = entry.SettingType;
             var acceptableValues = entry.Description?.AcceptableValues;
 
@@ -116,7 +151,7 @@ namespace ModUtils
         internal abstract float Build(RectTransform slot, ConfigurationGuiTemplates templates);
 
         /// <summary>
-        /// Shows the entry's current value without raising the widget's change event.
+        /// Shows <see cref="Value"/> without raising the widget's change event.
         /// </summary>
         internal abstract void Refresh();
 
@@ -137,19 +172,19 @@ namespace ModUtils
         }
 
         /// <summary>
-        /// Writes the value to the entry, then shows what the entry holds afterwards, so a correction made
-        /// by a SettingChanged handler is visible.
+        /// Stages the value in the panel, which clamps it as the entry would, then shows the staged value.
+        /// The entry is written when the panel's Apply is pressed.
         /// </summary>
         protected void Commit(object value)
         {
             try
             {
-                Entry.BoxedValue = value;
+                Pending.Stage(Entry, value);
             }
             catch (Exception e)
             {
                 UnityEngine.Debug.LogError(
-                    $"[ModUtils] Failed to set [{Entry.Definition.Section}:{Entry.Definition.Key}]: {e}");
+                    $"[ModUtils] Failed to stage [{Entry.Definition.Section}:{Entry.Definition.Key}]: {e}");
             }
 
             Refresh();
@@ -182,7 +217,7 @@ namespace ModUtils
 
         internal override void Refresh()
         {
-            _toggle.SetIsOnWithoutNotify((bool)Entry.BoxedValue);
+            _toggle.SetIsOnWithoutNotify((bool)Value);
         }
 
         internal override void SetInteractable(bool interactable)
@@ -193,11 +228,11 @@ namespace ModUtils
 
     /// <summary>
     /// Slider for ranged int and float entries, with a number field beside it. A pointer drag only
-    /// updates the field's text and is written on release; every other slider change (a click on the
-    /// track, arrow keys) is written at once. A number typed into the field is written on submit or when
+    /// updates the field's text and is staged on release; every other slider change (a click on the
+    /// track, arrow keys) is staged at once. A number typed into the field is staged on submit or when
     /// the field loses focus and is clamped to the range then, never while it is typed; while it is
     /// typed, the handle shows it, at the nearer end for a value outside the range. Text that is not a
-    /// number leaves the handle in place and brings back the current value when the edit ends. Escape in
+    /// number leaves the handle in place and brings back the shown value when the edit ends. Escape in
     /// the field cancels the edit only.
     /// </summary>
     internal sealed class ConfigurationGuiSliderEditor : ConfigurationGuiEditor
@@ -261,7 +296,7 @@ namespace ModUtils
 
         internal override void Refresh()
         {
-            var boxed = Entry.BoxedValue;
+            var boxed = Value;
             if (_wholeNumbers)
             {
                 var value = (int)boxed;
@@ -292,7 +327,7 @@ namespace ModUtils
 
         private void OnValueChanged(float value)
         {
-            // Shows the value that the release will write.
+            // Shows the value that the release will stage.
             _field.Input.SetTextWithoutNotify(_wholeNumbers
                 ? Mathf.RoundToInt(value).ToString(CultureInfo.InvariantCulture)
                 : FloorToHundredths(value).ToString(CultureInfo.InvariantCulture));
@@ -308,7 +343,7 @@ namespace ModUtils
         }
 
         /// <summary>
-        /// Moves the handle to the typed number without writing it or touching the text. Escape puts the
+        /// Moves the handle to the typed number without staging it or touching the text. Escape puts the
         /// original text back through the field's text setter, which raises this again, so the handle
         /// returns with it.
         /// </summary>
@@ -319,8 +354,8 @@ namespace ModUtils
         }
 
         /// <summary>
-        /// Writes the typed number once; the entry's range clamps it. Typing only moves the handle, so a
-        /// value is never written, clamped or rewritten halfway.
+        /// Stages the typed number once; the entry's range clamps it. Typing only moves the handle, so a
+        /// value is never staged, clamped or restaged halfway.
         /// </summary>
         private void OnEditFinished(string text)
         {
@@ -409,7 +444,7 @@ namespace ModUtils
 
         internal override void Refresh()
         {
-            var current = Entry.BoxedValue;
+            var current = Value;
             var index = _values.IndexOf(current);
             if (index < 0)
             {
@@ -465,18 +500,19 @@ namespace ModUtils
         internal override void Refresh()
         {
             string value;
+            var current = Value;
             try
             {
-                value = Entry.GetSerializedValue();
+                value = TomlTypeConverter.ConvertToString(current, Entry.SettingType);
             }
             catch (Exception)
             {
-                value = Entry.BoxedValue?.ToString();
+                value = current?.ToString();
             }
 
             value = (value ?? "").Replace('\r', ' ').Replace('\n', ' ');
             _text.text = value.Length > MaxLength ? value.Substring(0, MaxLength) + "..." : value;
-            _swatch?.Show((Color)Entry.BoxedValue);
+            _swatch?.Show((Color)current);
         }
 
         internal override void SetInteractable(bool interactable)

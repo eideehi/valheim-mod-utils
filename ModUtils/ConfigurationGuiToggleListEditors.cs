@@ -58,7 +58,7 @@ namespace ModUtils
 
         internal override void Refresh()
         {
-            var current = Convert.ToInt64(Entry.BoxedValue);
+            var current = Convert.ToInt64(Value);
             for (var i = 0; i < _toggles.Count; i++)
                 _toggles[i].SetIsOnWithoutNotify((current & _bits[i]) == _bits[i]);
         }
@@ -71,7 +71,7 @@ namespace ModUtils
 
         private void OnToggled(long bits, bool isOn)
         {
-            var current = Convert.ToInt64(Entry.BoxedValue);
+            var current = Convert.ToInt64(Value);
             var value = isOn ? current | bits : current & ~bits;
             Commit(Enum.ToObject(Entry.SettingType, value));
         }
@@ -155,7 +155,7 @@ namespace ModUtils
 
         internal override void Refresh()
         {
-            var selected = new HashSet<string>((IEnumerable<string>)Entry.BoxedValue);
+            var selected = new HashSet<string>((IEnumerable<string>)Value);
             if (_toggles != null)
                 for (var i = 0; i < _toggles.Count; i++)
                     _toggles[i].SetIsOnWithoutNotify(selected.Contains(_elements[i]));
@@ -217,7 +217,7 @@ namespace ModUtils
         private void OnToggled(string element, bool isOn)
         {
             // Same construction as the MultiSelect drawer: start from a copy of the whole current list.
-            var elements = (ICollection<string>)_constructor.Invoke(new[] { Entry.BoxedValue });
+            var elements = (ICollection<string>)_constructor.Invoke(new[] { Value });
             if (isOn)
                 elements.Add(element);
             else

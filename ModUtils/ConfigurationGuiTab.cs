@@ -6,8 +6,9 @@ using Valheim.SettingsGui;
 namespace ModUtils
 {
     /// <summary>
-    /// Settings tab behind the shared Mods page. Mod panels write every change immediately, so the
-    /// tab has nothing to apply on OK or to revert on Back.
+    /// Settings tab behind the shared Mods page. Mod panels write changes only through their own Apply
+    /// button and drop pending edits when they close, so the tab has nothing to apply on OK or to revert
+    /// on Back.
     /// </summary>
     internal sealed class ConfigurationGuiTab : MonoBehaviour, ISettingsTab
     {

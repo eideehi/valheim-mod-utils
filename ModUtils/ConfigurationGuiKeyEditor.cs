@@ -78,9 +78,9 @@ namespace ModUtils
             if (IsCapturing)
                 label = ConfigurationGui.Translate(ConfigurationGui.PressKeyKey);
             else if (_shortcut)
-                label = ((KeyboardShortcut)Entry.BoxedValue).ToString();
+                label = ((KeyboardShortcut)Value).ToString();
             else
-                label = Entry.BoxedValue.ToString();
+                label = Value.ToString();
 
             ConfigurationGuiTemplates.SetLabel(_button, label);
         }

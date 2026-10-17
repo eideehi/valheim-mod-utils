@@ -28,6 +28,8 @@ namespace ModUtils.SmokeTest
         private const string EditorSlotName = "Editor";
         private const string ResetButtonName = "Reset";
         private const string FooterName = "Footer";
+        private const string ApplyButtonName = "Apply";
+        private const string BackButtonName = "Back";
         private const string MultiSelectSummaryName = "Summary";
         private const string ScreenshotDirectoryName = "ui";
         private const string IntSliderIdentity = "editors/int_slider";
@@ -69,6 +71,7 @@ namespace ModUtils.SmokeTest
             }
 
             RunCleanupAction("restore the sample defaults", () => _guiSample.RestoreDefaults());
+            Application.logMessageReceived += OnGuiLogMessage;
 
             var state = new SettingsGuiState(Info.Metadata.GUID);
             var checks = new List<KeyValuePair<string, Func<IEnumerator>>>
@@ -82,10 +85,21 @@ namespace ModUtils.SmokeTest
                 UiCheck("settings_gui_slider_number_field", () => CheckSliderNumberField(state)),
                 UiCheck("settings_gui_color_swatch", () => CheckColorSwatch(state)),
                 UiCheck("settings_gui_reset_restores_defaults", () => CheckResetRestoresDefaults(state)),
+                UiCheck("settings_gui_editors_stage_until_apply", () => CheckEditorsStageUntilApply(state)),
+                UiCheck("settings_gui_apply_button_state", () => CheckApplyButtonState(state)),
+                UiCheck("settings_gui_apply_shows_corrected_value", () => CheckApplyShowsCorrectedValue(state)),
+                UiCheck("settings_gui_reset_all", () => CheckResetAll(state)),
+                UiCheck("settings_gui_custom_editor", () => CheckCustomEditor(state)),
+                UiCheck("settings_gui_custom_editor_failure_falls_back",
+                    () => CheckCustomEditorFailureFallsBack(state)),
+                UiCheck("settings_gui_search_filters_rows", () => CheckSearchFiltersRows(state)),
+                UiCheck("settings_gui_advanced_toggle", () => CheckAdvancedToggle(state)),
                 UiCheck("settings_gui_back_returns_to_mod_list", () => CheckBackReturnsToModList(state)),
                 UiCheck("settings_gui_reopened_panel_shows_current_value",
                     () => CheckReopenedPanelShowsCurrentValue(state)),
+                UiCheck("settings_gui_back_with_pending_asks", () => CheckBackWithPendingAsks(state)),
                 UiCheck("settings_gui_tab_switch_closes_panel", () => CheckTabSwitchClosesPanel(state)),
+                UiCheck("settings_gui_tab_switch_discards_pending", () => CheckTabSwitchDiscardsPending(state)),
                 UiCheck("settings_gui_ok_callback_runs_once", () => CheckOkCallbackRunsOnce(state)),
                 UiCheck("settings_gui_ok_closes_settings", CheckOkClosesSettings)
             };
@@ -93,6 +107,7 @@ namespace ModUtils.SmokeTest
             foreach (var check in checks)
                 yield return StartCoroutine(RunUiCheck(check.Key, check.Value, results));
 
+            Application.logMessageReceived -= OnGuiLogMessage;
             RunCleanupAction("restore the sample defaults", () => _guiSample.RestoreDefaults());
             if (Settings.instance != null)
             {
@@ -372,9 +387,8 @@ namespace ModUtils.SmokeTest
             toggle.isOn = toggled;
             yield return null;
 
-            Expect(toggleEntry.Value == toggled,
-                $"switching the toggle from {previousToggle} to {toggled} left the entry at {toggleEntry.Value}");
-            ExpectSavedValue(toggleEntry, toggled);
+            Expect(toggle.isOn == toggled, $"the toggle shows {toggle.isOn} after switching it to {toggled}");
+            ExpectStored(toggleEntry, previousToggle, "before Apply");
 
             var choiceEntry = _guiSample.ChoiceEntry;
             var dropdown = FindEditorWidget<TMP_Dropdown>(panel, choiceEntry);
@@ -392,11 +406,15 @@ namespace ModUtils.SmokeTest
             dropdown.value = index;
             yield return null;
 
-            Expect(choiceEntry.Value != previousChoice,
-                $"selecting option {index} left the entry at {previousChoice}");
-            Expect(choiceEntry.Value == choices[index],
-                $"selecting option {index} set the entry to {choiceEntry.Value}, expected {choices[index]}");
-            ExpectSavedValue(choiceEntry, choices[index]);
+            Expect(dropdown.value == index, $"the dropdown shows option {dropdown.value} after selecting {index}");
+            ExpectStored(choiceEntry, previousChoice, "before Apply");
+
+            PressApply(panel);
+            yield return null;
+
+            ExpectStored(toggleEntry, toggled, "after Apply");
+            ExpectStored(choiceEntry, choices[index], "after Apply");
+            ExpectApplyInteractable(panel, false, "after Apply");
         }
 
         private IEnumerator CheckSliderNumberField(SettingsGuiState state)
@@ -423,7 +441,8 @@ namespace ModUtils.SmokeTest
             var start = intEntry.Value;
             RequirePrecondition(start != intRange.MaxValue && start != submitted,
                 $"{IntSliderIdentity} already holds {start}");
-            RequirePrecondition(floatEntry.Value != typedFloat, $"{FloatSliderIdentity} already holds {typedFloat}");
+            RequirePrecondition(floatEntry.Value == (float)floatEntry.DefaultValue,
+                $"{FloatSliderIdentity} holds {floatEntry.Value} instead of its default");
             Expect(intField.text == start.ToString(CultureInfo.InvariantCulture),
                 $"the number field shows [{intField.text}] while the entry holds {start}");
 
@@ -448,42 +467,56 @@ namespace ModUtils.SmokeTest
             intField.onSubmit.Invoke(intField.text);
             yield return null;
 
-            Expect(intEntry.Value == max, $"submitting [150] set the entry to {intEntry.Value}, expected {max}");
-            ExpectSavedValue(intEntry, max);
+            // The submitted value is clamped and shown, but kept in the panel until Apply.
             Expect(intField.text == max.ToString(CultureInfo.InvariantCulture),
                 $"after submitting [150] the field shows [{intField.text}], expected [{max}]");
             Expect(intSlider.value == max, $"after submitting [150] the slider shows {intSlider.value}, expected {max}");
+            ExpectStored(intEntry, start, "after submitting [150] before Apply");
 
             intField.text = "abc";
             Expect(intSlider.value == max, $"typing [abc] moved the slider from {max} to {intSlider.value}");
             intField.onSubmit.Invoke(intField.text);
             yield return null;
 
-            Expect(intEntry.Value == max, $"submitting [abc] changed the entry from {max} to {intEntry.Value}");
             Expect(intField.text == max.ToString(CultureInfo.InvariantCulture),
-                $"after submitting [abc] the field shows [{intField.text}], expected [{max}]");
+                $"after submitting [abc] the field shows [{intField.text}], expected the pending [{max}]");
+            ExpectStored(intEntry, start, "after submitting [abc] before Apply");
+
+            PressApply(panel);
+            yield return null;
+            ExpectStored(intEntry, max, "after Apply of [150]");
 
             intField.text = submitted.ToString(CultureInfo.InvariantCulture);
             intField.onDeselect.Invoke(intField.text);
             yield return null;
 
-            Expect(intEntry.Value == submitted,
-                $"leaving the field with [{submitted}] set the entry to {intEntry.Value}, expected {submitted}");
+            Expect(intField.text == submitted.ToString(CultureInfo.InvariantCulture),
+                $"after leaving the field with [{submitted}] it shows [{intField.text}]");
+            ExpectStored(intEntry, max, $"after leaving the field with [{submitted}] before Apply");
 
             floatField.text = "0.333";
             floatField.onSubmit.Invoke(floatField.text);
             yield return null;
 
-            Expect(floatEntry.Value == typedFloat,
-                $"submitting [0.333] set the entry to {floatEntry.Value.ToString("R", CultureInfo.InvariantCulture)}, " +
-                $"expected {typedFloat.ToString("R", CultureInfo.InvariantCulture)}");
             Expect(floatField.text == "0.333",
                 $"after submitting [0.333] the field shows [{floatField.text}], expected [0.333]");
+            ExpectStored(floatEntry, floatEntry.DefaultValue, "after submitting [0.333] before Apply");
+
+            PressApply(panel);
+            yield return null;
+            ExpectStored(intEntry, submitted, $"after Apply of [{submitted}]");
+            ExpectStored(floatEntry, typedFloat, "after Apply of [0.333]");
+            Expect(floatField.text == "0.333",
+                $"after Apply of [0.333] the field shows [{floatField.text}], expected [0.333]");
 
             // Later checks and the saved config expect the defaults.
             PressReset(panel, intEntry);
             PressReset(panel, floatEntry);
             yield return null;
+            PressApply(panel);
+            yield return null;
+            ExpectStored(intEntry, intEntry.DefaultValue, "after Reset and Apply");
+            ExpectStored(floatEntry, floatEntry.DefaultValue, "after Reset and Apply");
         }
 
         private IEnumerator CheckColorSwatch(SettingsGuiState state)
@@ -522,14 +555,23 @@ namespace ModUtils.SmokeTest
             field.text = "#00FF00";
             field.onSubmit.Invoke(field.text);
             yield return null;
-            Expect(colorCodeEntry.Value == "#00FF00",
-                $"submitting [#00FF00] set the entry to [{colorCodeEntry.Value}]");
             ExpectSwatch(fill, Color.green, "the submitted [#00FF00]");
+            ExpectStored(colorCodeEntry, start, "after submitting [#00FF00] before Apply");
+
+            PressApply(panel);
+            yield return null;
+            ExpectStored(colorCodeEntry, "#00FF00", "after Apply of [#00FF00]");
+            ExpectSwatch(fill, Color.green, "the applied [#00FF00]");
 
             PressReset(panel, colorCodeEntry);
             yield return null;
-            Expect(colorCodeEntry.Value == start, $"Reset left {ColorCodeIdentity} at [{colorCodeEntry.Value}]");
             ExpectSwatch(fill, new Color32(0x4F, 0xA9, 0xFF, 0xFF), $"the reset [{start}]");
+            Expect(field.text == start, $"after Reset the field shows [{field.text}], expected [{start}]");
+            ExpectStored(colorCodeEntry, "#00FF00", "after Reset before Apply");
+
+            PressApply(panel);
+            yield return null;
+            ExpectStored(colorCodeEntry, start, "after Reset and Apply");
 
             var textEntry = FindSampleEntry<string>(TextIdentity);
             var textRow = FindRow(panel, textEntry);
@@ -559,6 +601,8 @@ namespace ModUtils.SmokeTest
             if (choiceEntry.Value == (SampleChoice)choiceEntry.DefaultValue)
                 choiceEntry.Value = Enum.GetValues(typeof(SampleChoice)).Cast<SampleChoice>()
                                         .First(x => x != (SampleChoice)choiceEntry.DefaultValue);
+            var changedToggle = toggleEntry.Value;
+            var changedChoice = choiceEntry.Value;
 
             foreach (var entry in new ConfigEntryBase[] { toggleEntry, choiceEntry })
             {
@@ -572,14 +616,20 @@ namespace ModUtils.SmokeTest
 
             yield return null;
 
-            Expect(toggleEntry.Value == (bool)toggleEntry.DefaultValue,
-                $"Reset left {SettingsGuiSample.Identity(toggleEntry)} at {toggleEntry.Value}");
-            Expect(choiceEntry.Value == (SampleChoice)choiceEntry.DefaultValue,
-                $"Reset left {SettingsGuiSample.Identity(choiceEntry)} at {choiceEntry.Value}");
-
             var toggle = FindEditorWidget<Toggle>(panel, toggleEntry);
             Expect(toggle != null && toggle.isOn == (bool)toggleEntry.DefaultValue,
                 "the toggle does not show the default value after Reset");
+            var dropdown = FindEditorWidget<TMP_Dropdown>(panel, choiceEntry);
+            Expect(dropdown != null && dropdown.value == (int)(SampleChoice)choiceEntry.DefaultValue,
+                "the dropdown does not show the default value after Reset");
+            ExpectStored(toggleEntry, changedToggle, "after Reset before Apply");
+            ExpectStored(choiceEntry, changedChoice, "after Reset before Apply");
+
+            PressApply(panel);
+            yield return null;
+
+            ExpectStored(toggleEntry, toggleEntry.DefaultValue, "after Reset and Apply");
+            ExpectStored(choiceEntry, choiceEntry.DefaultValue, "after Reset and Apply");
         }
 
         private IEnumerator CheckBackReturnsToModList(SettingsGuiState state)
@@ -588,9 +638,10 @@ namespace ModUtils.SmokeTest
             var panel = FindOpenPanel(state);
             RequirePrecondition(panel != null, "the plugin's panel is not open");
 
-            var footer = FindChild(panel, FooterName);
-            var back = footer != null ? footer.GetComponentInChildren<Button>(false) : null;
-            Expect(back != null, "the panel's footer shows no button");
+            var apply = FindFooterButton(panel, ApplyButtonName);
+            RequirePrecondition(apply != null && !apply.interactable, "the panel has pending changes");
+            var back = FindFooterButton(panel, BackButtonName);
+            Expect(back != null, $"the panel's footer shows no {BackButtonName} button");
 
             back.onClick.Invoke();
             yield return WaitFrames(2);
@@ -598,6 +649,7 @@ namespace ModUtils.SmokeTest
             Expect(Settings.instance != null, "Back on the panel closed the settings screen");
             Expect(state.List.gameObject.activeSelf, "the mod list is not shown after Back");
             Expect(FindOpenPanel(state) == null, "a panel is still shown after Back");
+            Expect(!UnifiedPopup.IsVisible(), "Back without pending changes showed a popup");
             var okButton = GetOkButton(state.Settings);
             Expect(okButton != null && okButton.gameObject.activeSelf,
                 "the settings OK button is still hidden after Back");
@@ -723,6 +775,18 @@ namespace ModUtils.SmokeTest
                 $"for {shown} the swatch shows {actual}, expected {expected}");
         }
 
+        /// <summary>
+        /// Expects the entry and the config file on disk to hold <paramref name="value"/>.
+        /// </summary>
+        private void ExpectStored(ConfigEntryBase entry, object value, string when)
+        {
+            var expected = TomlTypeConverter.ConvertToString(value, entry.SettingType);
+            var actual = entry.GetSerializedValue();
+            Expect(string.Equals(actual, expected, StringComparison.Ordinal),
+                $"{when}, {SettingsGuiSample.Identity(entry)} holds [{actual}], expected [{expected}]");
+            ExpectSavedValue(entry, value);
+        }
+
         private void ExpectSavedValue(ConfigEntryBase entry, object value)
         {
             var expected = TomlTypeConverter.ConvertToString(value, entry.SettingType);
@@ -803,7 +867,8 @@ namespace ModUtils.SmokeTest
         }
 
         /// <summary>
-        /// Rows the panel shows. Sections start expanded, so every visible entry has an active row.
+        /// Rows the panel shows: rows that the search and the advanced toggle leave shown, in expanded
+        /// sections.
         /// </summary>
         private static List<Transform> FindRows(Transform panel)
         {
@@ -817,6 +882,30 @@ namespace ModUtils.SmokeTest
         {
             var name = RowNamePrefix + SettingsGuiSample.Identity(entry);
             return FindRows(panel).FirstOrDefault(x => string.Equals(x.name, name, StringComparison.Ordinal));
+        }
+
+        private static Button FindFooterButton(Transform panel, string name)
+        {
+            var footer = FindChild(panel, FooterName);
+            var child = footer != null ? FindChild(footer, name) : null;
+            return child != null && child.gameObject.activeInHierarchy ? child.GetComponent<Button>() : null;
+        }
+
+        /// <summary>
+        /// Presses the footer's Apply button, which must be usable, as it is while changes are pending.
+        /// </summary>
+        private static void PressApply(Transform panel)
+        {
+            ExpectApplyInteractable(panel, true, "before pressing Apply");
+            FindFooterButton(panel, ApplyButtonName).onClick.Invoke();
+        }
+
+        private static void ExpectApplyInteractable(Transform panel, bool interactable, string when)
+        {
+            var apply = FindFooterButton(panel, ApplyButtonName);
+            Expect(apply != null, $"the panel's footer shows no {ApplyButtonName} button");
+            Expect(apply.interactable == interactable,
+                $"{when}, Apply is {(apply.interactable ? "" : "not ")}interactable");
         }
 
         private static void PressReset(Transform panel, ConfigEntryBase entry)

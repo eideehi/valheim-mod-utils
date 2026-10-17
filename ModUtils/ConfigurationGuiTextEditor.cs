@@ -9,8 +9,8 @@ namespace ModUtils
 {
     /// <summary>
     /// Single-line text field for string, int and float entries without a range, and for lists edited
-    /// in their serialized form. The text is written on submit or when the field loses focus; text
-    /// that cannot be converted brings back the current value. Escape cancels the edit only. A string
+    /// in their serialized form. The text is staged on submit or when the field loses focus; text
+    /// that cannot be converted brings back the shown value. Escape cancels the edit only. A string
     /// entry whose default value is a colour code also shows a swatch that follows the text while it is
     /// typed.
     /// </summary>
@@ -36,7 +36,7 @@ namespace ModUtils
             if (!_serialized && ConfigurationGuiSwatch.IsColorCode(Entry.DefaultValue))
             {
                 _swatch = ConfigurationGuiSwatch.Create(slot, fieldRect, height);
-                // Display only; the text is still written when the edit ends. Escape puts the original
+                // Display only; the text is still staged when the edit ends. Escape puts the original
                 // text back through the field's text setter, which raises this event too.
                 _field.Input.onValueChanged.AddListener(_swatch.Show);
             }
@@ -64,10 +64,10 @@ namespace ModUtils
 
         private string Format()
         {
+            var value = Value;
             if (_serialized)
-                return Entry.GetSerializedValue();
+                return TomlTypeConverter.ConvertToString(value, Entry.SettingType);
 
-            var value = Entry.BoxedValue;
             switch (value)
             {
                 case int number:
@@ -81,7 +81,7 @@ namespace ModUtils
 
         private void OnEditFinished(string text)
         {
-            // Unchanged text is not written again, so leaving the field never rewrites a value that its
+            // Unchanged text is not staged again, so leaving the field never restages a value that its
             // text shows rounded.
             if (string.Equals(text, _shown, StringComparison.Ordinal))
             {
@@ -91,9 +91,19 @@ namespace ModUtils
 
             if (_serialized)
             {
-                // BepInEx logs and ignores text that does not convert; Refresh then shows the kept value.
-                Entry.SetSerializedValue(text);
-                Refresh();
+                // Converted as BepInEx reads the config file; text that does not convert is dropped.
+                object value;
+                try
+                {
+                    value = TomlTypeConverter.ConvertToValue(text, Entry.SettingType);
+                }
+                catch (Exception)
+                {
+                    Refresh();
+                    return;
+                }
+
+                Commit(value);
                 return;
             }
 
@@ -113,9 +123,10 @@ namespace ModUtils
     }
 
     /// <summary>
-    /// Single-line copy of the Feedback text field and the parts that the editors typing into one share.
+    /// Single-line text field copied from the game, created by
+    /// <see cref="ConfigurationGuiWidgets.CreateTextField"/> and by the built-in text editors.
     /// </summary>
-    internal sealed class ConfigurationGuiInputField
+    public sealed class ConfigurationGuiInputField
     {
         private int _endEditFrame = -1;
 
@@ -124,7 +135,11 @@ namespace ModUtils
             Input = input;
         }
 
-        internal TMP_InputField Input { get; }
+        /// <summary>
+        /// The text field, for reading and setting its text and placeholder. Set the text with
+        /// <c>SetTextWithoutNotify</c> when showing a value, so no edit callback runs.
+        /// </summary>
+        public TMP_InputField Input { get; }
 
         /// <summary>
         /// Copies the Feedback field under <paramref name="parent"/>, leaving its layout to the caller.
@@ -183,10 +198,11 @@ namespace ModUtils
         }
 
         /// <summary>
-        /// True while the field is focused. The field also leaves editing on the Escape press itself, which
-        /// may happen before the panel looks at that press in the same frame.
+        /// True while the field is focused or when it ended editing on this frame. The field also leaves
+        /// editing on the Escape press itself, which may happen before the panel looks at that press in the
+        /// same frame.
         /// </summary>
-        internal bool ConsumesEscape()
+        public bool ConsumesEscape()
         {
             return Input.isFocused || _endEditFrame == Time.frameCount;
         }
