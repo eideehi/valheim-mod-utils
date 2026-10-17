@@ -385,11 +385,15 @@ namespace ModUtils
             CreateFilter(templates, rows.Any(x => x.Advanced));
             var content = CreateScrollView(transform, templates);
 
-            _description = ConfigurationGuiTemplates.CreateText(transform, "Description", label, 0.9f);
+            // Every row hover changes the text. Inside an area without a layout group, the change does not lay
+            // out the whole panel with its list again.
+            var descriptionArea = ConfigurationGuiTemplates.CreateRect("DescriptionArea", transform);
+            _description = ConfigurationGuiTemplates.CreateText(descriptionArea, "Description", label, 0.9f);
+            ConfigurationGuiTemplates.Stretch(_description.rectTransform, 0f, 0f, 0f, 0f);
             _description.textWrappingMode = TextWrappingModes.Normal;
             _description.alignment = TextAlignmentOptions.TopLeft;
             var descriptionHeight = _description.fontSize * DescriptionLines;
-            ConfigurationGuiTemplates.AddLayout(_description.gameObject, minHeight: descriptionHeight,
+            ConfigurationGuiTemplates.AddLayout(descriptionArea.gameObject, minHeight: descriptionHeight,
                 preferredHeight: descriptionHeight);
 
             CreateFooter(templates);
@@ -511,7 +515,8 @@ namespace ModUtils
                 scrollbarRect.anchorMin = new Vector2(1f, 0f);
                 scrollbarRect.anchorMax = Vector2.one;
                 scrollbarRect.pivot = Vector2.one;
-                scrollbarRect.sizeDelta = new Vector2(width >= 1f ? Mathf.Min(width, 32f) : 12f, 0f);
+                var scrollbarWidth = width >= 1f ? Mathf.Min(width, 32f) : 12f;
+                scrollbarRect.sizeDelta = new Vector2(scrollbarWidth, 0f);
                 scrollbarRect.anchoredPosition = Vector2.zero;
                 scrollbar.direction = Scrollbar.Direction.BottomToTop;
                 var navigation = scrollbar.navigation;
@@ -519,8 +524,10 @@ namespace ModUtils
                 scrollbar.navigation = navigation;
 
                 scroll.verticalScrollbar = scrollbar;
-                scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
-                scroll.verticalScrollbarSpacing = ScrollbarSpacing;
+                // Inset the viewport instead of letting the scroll rect expand it: expanding makes every layout
+                // pass of the panel lay out the whole list again.
+                ConfigurationGuiTemplates.Stretch(viewport, 0f, scrollbarWidth + ScrollbarSpacing, 0f, 0f);
+                scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
             }
 
             return content;

@@ -28,16 +28,21 @@ namespace ModUtils
         }
 
         /// <summary>
-        /// Builds the hidden overlay as the last child of <paramref name="panel"/>, so it draws over the
-        /// panel's other parts. Returns null when the Settings screen has no tooltip frame to copy.
+        /// Builds the hidden overlay in a layer added as the last child of <paramref name="panel"/>, so it
+        /// draws over the panel's other parts. Returns null when the Settings screen has no tooltip frame to
+        /// copy.
         /// </summary>
         internal static ConfigurationGuiFullDescription Create(Transform panel, ConfigurationGuiTemplates templates)
         {
             if (templates.TooltipFrame == null) return null;
 
-            var root = ConfigurationGuiTemplates.CreateRect("FullDescription", panel);
-            // The panel stacks its other children; Show places this one over them.
-            ConfigurationGuiTemplates.AddLayout(root.gameObject).ignoreLayout = true;
+            // A layer without a layout group, so that showing, hiding and filling the overlay lay out only the
+            // overlay and not the whole panel with its list. It covers the panel, outside the panel's stack.
+            var layer = ConfigurationGuiTemplates.CreateRect("FullDescriptionLayer", panel);
+            ConfigurationGuiTemplates.AddLayout(layer.gameObject).ignoreLayout = true;
+            ConfigurationGuiTemplates.Stretch(layer, 0f, 0f, 0f, 0f);
+
+            var root = ConfigurationGuiTemplates.CreateRect("FullDescription", layer);
             root.anchorMin = Vector2.zero;
             root.anchorMax = Vector2.zero;
             root.pivot = Vector2.zero;
@@ -79,8 +84,8 @@ namespace ModUtils
 
         /// <summary>
         /// Shows <paramref name="topic"/> and <paramref name="text"/> as wide as <paramref name="area"/>,
-        /// with the overlay's bottom-left corner on the area's. The area shares the panel as parent, so
-        /// its width applies as it is.
+        /// with the overlay's bottom-left corner on the area's. The area and the overlay both sit in the
+        /// panel without scaling in between, so its width applies as it is.
         /// </summary>
         internal void Show(RectTransform area, string topic, string text)
         {

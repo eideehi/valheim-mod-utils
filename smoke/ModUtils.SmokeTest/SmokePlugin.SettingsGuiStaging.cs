@@ -32,6 +32,7 @@ namespace ModUtils.SmokeTest
         private const string WidgetButtonName = "Button";
         private const string WidgetLabelName = "Label";
         private const string DiscardPromptScreenshot = "settings-gui-discard-prompt.png";
+        private const string FullDescriptionLayerName = "FullDescriptionLayer";
         private const string FullDescriptionName = "FullDescription";
         private const string DescriptionScreenshot = "settings-gui-description.png";
 
@@ -785,7 +786,8 @@ namespace ModUtils.SmokeTest
         /// </summary>
         private static Transform FindFullDescription(Transform panel)
         {
-            var overlay = FindChild(panel, FullDescriptionName);
+            var layer = FindChild(panel, FullDescriptionLayerName);
+            var overlay = layer != null ? FindChild(layer, FullDescriptionName) : null;
             return overlay != null && overlay.gameObject.activeInHierarchy ? overlay : null;
         }
 
