@@ -35,8 +35,8 @@ namespace ModUtils.SmokeTest
         private const string FullDescriptionName = "FullDescription";
         private const string DescriptionScreenshot = "settings-gui-description.png";
 
-        // Longer than the half second that the pointer must stay on a row before its description unfolds.
-        private const float UnfoldWaitSeconds = 1f;
+        // Longer than the second and a half that the pointer must stay on a row before its description unfolds.
+        private const float UnfoldWaitSeconds = 2f;
 
         // UnifiedPopup shows Yes on its right button and No on its left button.
         private const string PopupYesButtonField = "buttonRight";

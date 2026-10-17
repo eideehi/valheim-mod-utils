@@ -35,7 +35,7 @@ namespace ModUtils
         private const float ScrollMinHeight = 120f;
         private const float ScrollbarSpacing = 4f;
         private const float DescriptionLines = 3.6f;
-        private const float UnfoldDelay = 0.5f;
+        private const float UnfoldDelay = 1.5f;
         private const float BackMinWidth = 120f;
         private const float BackMaxWidth = 260f;
 
@@ -122,7 +122,7 @@ namespace ModUtils
         /// Shows the description of <paramref name="row"/> in the area below the list, or clears the area
         /// when <paramref name="row"/> is null. A description that the area cuts off unfolds in full over
         /// the list once the pointer has stayed on the row for <see cref="UnfoldDelay"/> seconds; any
-        /// hover change folds it again.
+        /// hover change or mouse button press folds it again.
         /// </summary>
         internal void ShowDescription(ConfigurationGuiRowHover row)
         {
@@ -145,6 +145,14 @@ namespace ModUtils
             _description.ForceMeshUpdate();
             if (_description.isTextTruncated)
                 _fullDescription?.Show(_description.rectTransform, _hoveredRow.RowName, _description.text);
+        }
+
+        // Pressing a button on a row means the user is working with it, so its description stays folded
+        // until the pointer enters a row anew.
+        private void FoldDescription()
+        {
+            _unfoldTime = float.PositiveInfinity;
+            _fullDescription?.Hide();
         }
 
         private void Close()
@@ -285,6 +293,10 @@ namespace ModUtils
         {
             if (Time.unscaledTime >= _unfoldTime)
                 UnfoldDescription();
+
+            if (_hoveredRow != null && (ZInput.GetKeyDown(KeyCode.Mouse0) || ZInput.GetKeyDown(KeyCode.Mouse1) ||
+                                        ZInput.GetKeyDown(KeyCode.Mouse2)))
+                FoldDescription();
 
             // The gamepad back button closes the panel like Escape, as it closes the game's own dialogs.
             if (_closed || !(ZInput.GetKeyDown(KeyCode.Escape) || ZInput.GetButtonDown("JoyButtonB")) ||
