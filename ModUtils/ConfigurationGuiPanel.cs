@@ -38,6 +38,9 @@ namespace ModUtils
         private const float UnfoldDelay = 1.5f;
         private const float BackMinWidth = 120f;
         private const float BackMaxWidth = 260f;
+        // Building every row of a long mod in one frame stops the game for a moment, so the panel opens
+        // with its first rows and adds the rest a batch per frame.
+        private const int RowsPerFrame = 16;
 
         // Kept by this ModUtils copy for the game session, so every panel it opens starts with the user's
         // last choice.
@@ -45,6 +48,7 @@ namespace ModUtils
 
         private readonly List<Row> _rows = new List<Row>();
         private readonly List<Section> _sections = new List<Section>();
+        private readonly Queue<(Section Section, Row Row)> _unbuiltRows = new Queue<(Section, Row)>();
         private Button _apply;
         private bool _closed;
         private TMP_Text _description;
@@ -54,8 +58,11 @@ namespace ModUtils
         private GameObject _panels;
         private ConfigurationGuiPendingValues _pending;
         private bool _prompting;
+        private Button _resetAll;
         private ConfigurationGuiInputField _search;
         private bool _searching;
+        private string[] _searchTerms = Array.Empty<string>();
+        private ConfigurationGuiTemplates _templates;
         private float _unfoldTime = float.PositiveInfinity;
 
         internal static void Open(ConfigurationGuiPlugin plugin, RectTransform page)
@@ -230,7 +237,8 @@ namespace ModUtils
         /// <summary>
         /// Stages the default value of every row that can be edited, including rows that the advanced
         /// toggle or the search hides. Read-only rows, also those of types without an editor, and hidden
-        /// (Browsable false) entries, which have no row, keep their values.
+        /// (Browsable false) entries, which have no row, keep their values. The button is available once
+        /// every row is built.
         /// </summary>
         private void ResetAll()
         {
@@ -251,13 +259,14 @@ namespace ModUtils
         /// Shows the rows whose name, category, description, section or key contain every space-separated
         /// term of the search text, ignoring case. Advanced rows show only with the advanced toggle on, or
         /// while searching, as ConfigurationManager searches them too. A section shows while it has a shown
-        /// row, and every section shows expanded while searching. Display only; pending edits stay.
+        /// row, and every section shows expanded while searching. Rows built later follow the same rule.
+        /// Display only; pending edits stay.
         /// </summary>
         private void ApplyFilter()
         {
             var text = _search != null ? _search.Input.text ?? "" : "";
-            var terms = text.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            var searching = terms.Length > 0;
+            _searchTerms = text.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            var searching = _searchTerms.Length > 0;
             // Every change of the results shows each matching section expanded again.
             if (searching)
                 foreach (var section in _sections)
@@ -265,10 +274,15 @@ namespace ModUtils
             _searching = searching;
 
             foreach (var row in _rows)
-                row.Object.SetActive((!row.Advanced || _showAdvanced || searching) && row.Matches(terms));
+                row.Object.SetActive(IsShown(row));
 
             foreach (var section in _sections)
                 ShowSection(section);
+        }
+
+        private bool IsShown(Row row)
+        {
+            return (!row.Advanced || _showAdvanced || _searching) && row.Matches(_searchTerms);
         }
 
         /// <summary>
@@ -303,6 +317,9 @@ namespace ModUtils
 
         private void Update()
         {
+            if (_unbuiltRows.Count > 0)
+                BuildRows();
+
             if (Time.unscaledTime >= _unfoldTime)
                 UnfoldDescription();
 
@@ -362,6 +379,7 @@ namespace ModUtils
         private void Build(ConfigurationGuiPlugin plugin, ConfigurationGuiTemplates templates)
         {
             _pending = new ConfigurationGuiPendingValues(plugin.Name);
+            _templates = templates;
             var rows = CreateRows(plugin.Config);
 
             var layout = gameObject.AddComponent<VerticalLayoutGroup>();
@@ -403,6 +421,24 @@ namespace ModUtils
             ApplyFilter();
             UpdateApplyButton();
             _pending.Changed = UpdateApplyButton;
+            BuildRows();
+        }
+
+        private void BuildRows()
+        {
+            var filled = new List<Section>();
+            for (var i = 0; i < RowsPerFrame && _unbuiltRows.Count > 0; i++)
+            {
+                var (section, row) = _unbuiltRows.Dequeue();
+                CreateRow(row, section.Body, _templates);
+                section.Rows.Add(row);
+                if (!filled.Contains(section))
+                    filled.Add(section);
+            }
+
+            foreach (var section in filled)
+                ShowSection(section);
+            _resetAll.interactable = _unbuiltRows.Count == 0;
         }
 
         /// <summary>
@@ -550,7 +586,8 @@ namespace ModUtils
             ConfigurationGuiTemplates.AddLayout(footer.gameObject, minHeight: height, preferredHeight: height);
 
             // Reset all sits at the left end, apart from Apply and Back at the right end.
-            CreateFooterButton(source, footer, "ResetAll", ConfigurationGui.ResetAllKey, width, height, ResetAll);
+            _resetAll = CreateFooterButton(source, footer, "ResetAll", ConfigurationGui.ResetAllKey, width, height,
+                ResetAll);
             var gap = ConfigurationGuiTemplates.CreateRect("Gap", footer);
             ConfigurationGuiTemplates.AddLayout(gap.gameObject, flexibleWidth: 1f);
             _apply = CreateFooterButton(source, footer, "Apply", ConfigurationGui.ApplyKey, width, height, Apply);
@@ -592,10 +629,7 @@ namespace ModUtils
             {
                 var section = CreateSection(group.Key, content, templates);
                 foreach (var row in group.OrderByDescending(x => x.Order).ThenBy(x => x.Index))
-                {
-                    CreateRow(row, section.Body, templates);
-                    section.Rows.Add(row);
-                }
+                    _unbuiltRows.Enqueue((section, row));
 
                 _sections.Add(section);
             }
@@ -635,6 +669,9 @@ namespace ModUtils
             // The name identifies the entry, so automated checks can find a row by section and key.
             var definition = row.Entry.Definition;
             var rowRect = ConfigurationGuiTemplates.CreateRect($"Row:{definition.Section}/{definition.Key}", body);
+            // Inactive until complete, so its widgets are copied and its texts created on an inactive object
+            // also while the panel is shown; the filter then decides whether it shows.
+            rowRect.gameObject.SetActive(false);
             // Transparent, but makes the whole row report the pointer for the description area.
             rowRect.gameObject.AddComponent<Image>().color = Color.clear;
             var layout = rowRect.gameObject.AddComponent<HorizontalLayoutGroup>();
@@ -692,6 +729,8 @@ namespace ModUtils
                 ConfigurationGuiTemplates.AddLayout(note.gameObject, minWidth: ResetWidth, minHeight: lineHeight,
                     preferredWidth: ResetWidth);
             }
+
+            rowRect.gameObject.SetActive(IsShown(row));
         }
 
         internal static ConfigurationManagerAttributes GetAttributes(ConfigEntryBase entry)

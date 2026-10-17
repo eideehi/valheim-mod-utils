@@ -48,6 +48,7 @@ namespace ModUtils.SmokeTest
         private const float MainMenuWaitSeconds = 60f;
         private const int SettingsOpenFrames = 3;
         private const int SettingsCloseMaxFrames = 120;
+        private const int PanelBuildMaxFrames = 120;
         private const float ScreenshotWaitSeconds = 3f;
         private const float ScreenshotSettleSeconds = 0.25f;
 
@@ -93,6 +94,8 @@ namespace ModUtils.SmokeTest
                 UiCheck("settings_gui_custom_editor_failure_falls_back",
                     () => CheckCustomEditorFailureFallsBack(state)),
                 UiCheck("settings_gui_search_filters_rows", () => CheckSearchFiltersRows(state)),
+                UiCheck("settings_gui_search_during_build_filters_later_rows",
+                    () => CheckSearchDuringBuildFiltersLaterRows(state)),
                 UiCheck("settings_gui_advanced_toggle", () => CheckAdvancedToggle(state)),
                 UiCheck("settings_gui_long_description_unfolds", () => CheckLongDescriptionUnfolds(state)),
                 UiCheck("settings_gui_back_returns_to_mod_list", () => CheckBackReturnsToModList(state)),
@@ -294,7 +297,7 @@ namespace ModUtils.SmokeTest
             RequirePrecondition(button != null, "the mod list has no button for this plugin");
 
             button.onClick.Invoke();
-            yield return WaitFrames(2);
+            yield return WaitForPanelBuilt(state);
 
             var panel = FindOpenPanel(state);
             Expect(panel != null, $"no active panel named {state.Guid} after clicking the plugin's button");
@@ -308,6 +311,33 @@ namespace ModUtils.SmokeTest
             Expect(missing.Count == 0 && unexpected.Count == 0 && duplicated.Count == 0,
                 $"rows differ from the visible entries: missing=[{string.Join(", ", missing)}] " +
                 $"unexpected=[{string.Join(", ", unexpected)}] duplicated=[{string.Join(", ", duplicated)}]");
+
+            // No sample entry sets an Order, so sections follow the order in which their entries are bound,
+            // and so do the rows within each section.
+            var expectedPlaces = new[]
+            {
+                (SettingsGuiSample.EditorsCategory, new[]
+                {
+                    "editors/toggle", "editors/int_slider", "editors/float_slider", "editors/int_text",
+                    "editors/non_negative", "editors/text", "editors/color_code", "editors/choice", "editors/flags"
+                }),
+                (SettingsGuiSample.KeysAndListsCategory, new[]
+                {
+                    "keys_and_lists/shortcut", "keys_and_lists/key", "keys_and_lists/multi_select",
+                    "keys_and_lists/plain_list"
+                }),
+                (SettingsGuiSample.VisibilityCategory, new[] { "visibility/color", "visibility/read_only_toggle" }),
+                (SettingsGuiSample.CustomCategory, new[]
+                {
+                    "custom/word_list", "custom/locked_word_list", "custom/broken_factory", "custom/broken_build"
+                })
+            }.SelectMany(x => x.Item2.Select(identity => x.Item1 + " > " + identity)).ToList();
+            var shownPlaces = FindRows(panel)
+                              .Select(x => GetRowSectionCategory(x) + " > " + x.name.Substring(RowNamePrefix.Length))
+                              .ToList();
+            Expect(shownPlaces.SequenceEqual(expectedPlaces),
+                $"rows are not shown in their sections in bind order: shown=[{string.Join(", ", shownPlaces)}] " +
+                $"expected=[{string.Join(", ", expectedPlaces)}]");
 
             yield return CaptureScreenshot("settings-gui-panel.png");
 
@@ -668,7 +698,7 @@ namespace ModUtils.SmokeTest
             toggleEntry.Value = changed;
 
             button.onClick.Invoke();
-            yield return WaitFrames(2);
+            yield return WaitForPanelBuilt(state);
 
             var panel = FindOpenPanel(state);
             Expect(panel != null, "the plugin's panel did not open again");
@@ -689,7 +719,7 @@ namespace ModUtils.SmokeTest
                 var button = FindModButton(state);
                 RequirePrecondition(button != null, "the mod list has no button for this plugin");
                 button.onClick.Invoke();
-                yield return WaitFrames(2);
+                yield return WaitForPanelBuilt(state);
             }
 
             RequirePrecondition(FindOpenPanel(state) != null, "the plugin's panel could not be opened");
@@ -739,6 +769,29 @@ namespace ModUtils.SmokeTest
         {
             for (var i = 0; i < SettingsCloseMaxFrames && Settings.instance != null; i++)
                 yield return null;
+        }
+
+        /// <summary>
+        /// Waits after a click on the plugin's button until its panel has built every row, which the panel
+        /// shows by making Reset all interactable. At least one frame passes, so the panel has been laid
+        /// out. A panel still building after <see cref="PanelBuildMaxFrames"/> frames fails the check; when
+        /// no panel opened, this returns and leaves that to the caller.
+        /// </summary>
+        private static IEnumerator WaitForPanelBuilt(SettingsGuiState state)
+        {
+            var built = false;
+            for (var i = 0; i < PanelBuildMaxFrames && !built; i++)
+            {
+                yield return null;
+                var panel = FindOpenPanel(state);
+                if (panel == null) yield break;
+
+                var resetAll = FindFooterButton(panel, ResetAllButtonName);
+                built = resetAll != null && resetAll.interactable;
+            }
+
+            Expect(built, $"{ResetAllButtonName} is still missing or not interactable {PanelBuildMaxFrames} frames " +
+                          "after the panel opened, so the panel did not finish adding its rows");
         }
 
         /// <summary>
@@ -877,6 +930,18 @@ namespace ModUtils.SmokeTest
                         .Where(x => x.gameObject.activeInHierarchy &&
                                     x.name.StartsWith(RowNamePrefix, StringComparison.Ordinal))
                         .ToList();
+        }
+
+        /// <summary>
+        /// The category that the header of a row's section shows, without its collapse mark.
+        /// </summary>
+        private static string GetRowSectionCategory(Transform row)
+        {
+            var body = row.parent;
+            var index = body.GetSiblingIndex();
+            var header = index > 0 ? body.parent.GetChild(index - 1).GetComponent<Button>() : null;
+            var text = header != null && header.name == SectionHeaderName ? GetHeaderText(header) : "";
+            return text.Length > 2 ? text.Substring(2) : "";
         }
 
         private static Transform FindRow(Transform panel, ConfigEntryBase entry)

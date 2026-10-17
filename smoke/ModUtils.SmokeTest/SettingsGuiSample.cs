@@ -37,8 +37,8 @@ namespace ModUtils.SmokeTest
         private const string CustomSection = "custom";
         internal const string EditorsCategory = "Editors";
         internal const string KeysAndListsCategory = "Keys and lists";
-        private const string VisibilityCategory = "Read-only and hidden";
-        private const string CustomCategory = "Custom editors";
+        internal const string VisibilityCategory = "Read-only and hidden";
+        internal const string CustomCategory = "Custom editors";
 
         private static readonly string[] Materials =
             { "Wood", "Stone", "Flint", "Resin", "Feathers", "Leather scraps" };

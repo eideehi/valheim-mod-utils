@@ -506,6 +506,51 @@ namespace ModUtils.SmokeTest
             ExpectApplyInteractable(panel, false, "after searching");
         }
 
+        private IEnumerator CheckSearchDuringBuildFiltersLaterRows(SettingsGuiState state)
+        {
+            yield return ShowFreshModList(state);
+            var button = FindModButton(state);
+            RequirePrecondition(button != null, "the mod list has no button for this plugin");
+
+            // Everything up to the wait runs in the frame of the click, while the panel still adds its rows.
+            button.onClick.Invoke();
+            var panel = FindOpenPanel(state);
+            Expect(panel != null, "the plugin's panel did not open");
+            var lateIdentity = SettingsGuiSample.Identity(_guiSample.WordListEntry);
+            Expect(panel.GetComponentsInChildren<Transform>(true).All(x => x.name != RowNamePrefix + lateIdentity),
+                $"the row for {lateIdentity} already exists in the frame the panel opened, so the panel built " +
+                "every row at once; the sample needs more rows than the panel builds in its first frame");
+            var resetAll = FindFooterButton(panel, ResetAllButtonName);
+            Expect(resetAll != null, $"the panel's footer shows no {ResetAllButtonName} button");
+            Expect(!resetAll.interactable, $"{ResetAllButtonName} is interactable while the panel still adds its rows");
+
+            // "list" is in the long description of the text row, the category of the keys and lists rows and
+            // the key or description of the two custom word lists, but not in the toggle row or the rows of
+            // the two failing editors.
+            var search = FindSearchField(panel);
+            Expect(search != null, $"the panel has no {SearchFieldName} field");
+            search.text = "list";
+            Expect(FindRow(panel, FindSampleEntry<StringList>("keys_and_lists/plain_list")) != null,
+                "while the panel still adds its rows, searching [list] hides the matching row " +
+                "keys_and_lists/plain_list");
+            Expect(FindRow(panel, _guiSample.ToggleEntry) == null,
+                "while the panel still adds its rows, searching [list] still shows the row editors/toggle, " +
+                "which does not match");
+
+            yield return WaitForPanelBuilt(state);
+            ExpectShownRows(panel,
+                new[]
+                {
+                    "editors/text", "keys_and_lists/shortcut", "keys_and_lists/key", "keys_and_lists/multi_select",
+                    "keys_and_lists/plain_list", "custom/word_list", "custom/locked_word_list"
+                }, "after the panel added its remaining rows while searching [list]");
+            var custom = FindSectionHeader(panel, SettingsGuiSample.CustomCategory);
+            Expect(custom != null && custom.gameObject.activeInHierarchy,
+                "after the panel added its remaining rows while searching [list], the header of the section " +
+                "with the matching later rows is hidden");
+            Expect(resetAll.interactable, $"{ResetAllButtonName} is not interactable after the panel added every row");
+        }
+
         private IEnumerator CheckAdvancedToggle(SettingsGuiState state)
         {
             yield return OpenFreshPanel(state);
@@ -530,7 +575,7 @@ namespace ModUtils.SmokeTest
                 var button = FindModButton(state);
                 Expect(button != null, "the mod list is not shown after Back");
                 button.onClick.Invoke();
-                yield return WaitFrames(2);
+                yield return WaitForPanelBuilt(state);
                 panel = FindOpenPanel(state);
                 Expect(panel != null && FindAdvancedToggle(panel)?.isOn == true,
                     "the advanced toggle is off after reopening the panel");
@@ -548,7 +593,7 @@ namespace ModUtils.SmokeTest
                 button = FindModButton(state);
                 Expect(button != null, "the mod list is not shown after reopening the settings screen");
                 button.onClick.Invoke();
-                yield return WaitFrames(2);
+                yield return WaitForPanelBuilt(state);
                 panel = FindOpenPanel(state);
                 toggle = panel != null ? FindAdvancedToggle(panel) : null;
                 Expect(toggle != null && toggle.isOn, "the advanced toggle is off after reopening the settings screen");
@@ -655,7 +700,7 @@ namespace ModUtils.SmokeTest
             var button = FindModButton(state);
             Expect(button != null, "the mod list has no button for this plugin");
             button.onClick.Invoke();
-            yield return WaitFrames(2);
+            yield return WaitForPanelBuilt(state);
             panel = FindOpenPanel(state);
             Expect(panel != null, "the plugin's panel did not open again");
             toggle = FindEditorWidget<Toggle>(panel, entry);
@@ -700,7 +745,7 @@ namespace ModUtils.SmokeTest
             ExpectStored(entry, original, "after leaving the Mods tab");
 
             FindModButton(state).onClick.Invoke();
-            yield return WaitFrames(2);
+            yield return WaitForPanelBuilt(state);
             panel = FindOpenPanel(state);
             Expect(panel != null, "the plugin's panel did not open again");
             toggle = FindEditorWidget<Toggle>(panel, entry);
@@ -710,12 +755,34 @@ namespace ModUtils.SmokeTest
         }
 
         /// <summary>
-        /// Closes the plugin's panel by leaving the Mods tab, which drops pending changes without asking,
-        /// puts the sample entries back to their defaults, lets <paramref name="prepare"/> change entries
-        /// while no panel shows them, and opens the panel again with an empty search and the advanced
-        /// toggle off.
+        /// Shows a fresh mod list (see <see cref="ShowFreshModList"/>) and opens the plugin's panel again
+        /// with an empty search and the advanced toggle off, once the panel has built every row.
         /// </summary>
         private IEnumerator OpenFreshPanel(SettingsGuiState state, Action prepare = null)
+        {
+            yield return ShowFreshModList(state, prepare);
+
+            var button = FindModButton(state);
+            RequirePrecondition(button != null, "the mod list has no button for this plugin");
+            button.onClick.Invoke();
+            yield return WaitForPanelBuilt(state);
+
+            var panel = FindOpenPanel(state);
+            RequirePrecondition(panel != null, "the plugin's panel could not be opened");
+            var toggle = FindAdvancedToggle(panel);
+            if (toggle != null && toggle.isOn)
+            {
+                toggle.isOn = false;
+                yield return null;
+            }
+        }
+
+        /// <summary>
+        /// Closes the plugin's panel by leaving the Mods tab, which drops pending changes without asking,
+        /// puts the sample entries back to their defaults, lets <paramref name="prepare"/> change entries
+        /// while no panel shows them, and shows the mod list again.
+        /// </summary>
+        private IEnumerator ShowFreshModList(SettingsGuiState state, Action prepare = null)
         {
             RequireModsPage(state);
             RequirePrecondition(state.ModsTabIndex != 0, "the Mods tab is the first tab, so there is no other tab to switch to");
@@ -727,20 +794,6 @@ namespace ModUtils.SmokeTest
             prepare?.Invoke();
             state.TabHandler.SetActiveTab(state.ModsTabIndex, forceSelect: true);
             yield return WaitFrames(1);
-
-            var button = FindModButton(state);
-            RequirePrecondition(button != null, "the mod list has no button for this plugin");
-            button.onClick.Invoke();
-            yield return WaitFrames(2);
-
-            var panel = FindOpenPanel(state);
-            RequirePrecondition(panel != null, "the plugin's panel could not be opened");
-            var toggle = FindAdvancedToggle(panel);
-            if (toggle != null && toggle.isOn)
-            {
-                toggle.isOn = false;
-                yield return null;
-            }
         }
 
         /// <summary>

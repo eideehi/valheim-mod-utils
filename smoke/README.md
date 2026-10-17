@@ -45,7 +45,7 @@ Launch Valheim after deploying. The plugin logs individual smoke results and one
 summary line to the BepInEx log:
 
 ```text
-[ModUtils Smoke] Summary: total=34 passed=34 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
+[ModUtils Smoke] Summary: total=35 passed=35 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
 ```
 
 The plugin also registers sample entries for the in-game config screen, including
