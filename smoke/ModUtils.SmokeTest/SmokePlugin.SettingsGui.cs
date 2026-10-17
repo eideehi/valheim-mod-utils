@@ -94,6 +94,7 @@ namespace ModUtils.SmokeTest
                     () => CheckCustomEditorFailureFallsBack(state)),
                 UiCheck("settings_gui_search_filters_rows", () => CheckSearchFiltersRows(state)),
                 UiCheck("settings_gui_advanced_toggle", () => CheckAdvancedToggle(state)),
+                UiCheck("settings_gui_long_description_unfolds", () => CheckLongDescriptionUnfolds(state)),
                 UiCheck("settings_gui_back_returns_to_mod_list", () => CheckBackReturnsToModList(state)),
                 UiCheck("settings_gui_reopened_panel_shows_current_value",
                     () => CheckReopenedPanelShowsCurrentValue(state)),

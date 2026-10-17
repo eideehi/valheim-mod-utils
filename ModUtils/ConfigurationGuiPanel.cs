@@ -35,6 +35,7 @@ namespace ModUtils
         private const float ScrollMinHeight = 120f;
         private const float ScrollbarSpacing = 4f;
         private const float DescriptionLines = 3.6f;
+        private const float UnfoldDelay = 0.5f;
         private const float BackMinWidth = 120f;
         private const float BackMaxWidth = 260f;
 
@@ -47,12 +48,15 @@ namespace ModUtils
         private Button _apply;
         private bool _closed;
         private TMP_Text _description;
+        private ConfigurationGuiFullDescription _fullDescription;
+        private ConfigurationGuiRowHover _hoveredRow;
         private GameObject _list;
         private GameObject _panels;
         private ConfigurationGuiPendingValues _pending;
         private bool _prompting;
         private ConfigurationGuiInputField _search;
         private bool _searching;
+        private float _unfoldTime = float.PositiveInfinity;
 
         internal static void Open(ConfigurationGuiPlugin plugin, RectTransform page)
         {
@@ -109,10 +113,38 @@ namespace ModUtils
             return false;
         }
 
-        internal void ShowDescription(string description)
+        /// <summary>
+        /// The row the description area shows, or null when no row is hovered.
+        /// </summary>
+        internal ConfigurationGuiRowHover HoveredRow => _hoveredRow;
+
+        /// <summary>
+        /// Shows the description of <paramref name="row"/> in the area below the list, or clears the area
+        /// when <paramref name="row"/> is null. A description that the area cuts off unfolds in full over
+        /// the list once the pointer has stayed on the row for <see cref="UnfoldDelay"/> seconds; any
+        /// hover change folds it again.
+        /// </summary>
+        internal void ShowDescription(ConfigurationGuiRowHover row)
         {
+            var description = row != null ? row.Description : "";
             if (_description != null)
                 _description.text = description ?? "";
+
+            _hoveredRow = row;
+            // Unscaled, because the pause menu stops game time.
+            _unfoldTime = string.IsNullOrEmpty(description)
+                ? float.PositiveInfinity
+                : Time.unscaledTime + UnfoldDelay;
+            _fullDescription?.Hide();
+        }
+
+        private void UnfoldDescription()
+        {
+            _unfoldTime = float.PositiveInfinity;
+            // The text was set on an earlier frame; this makes sure the cut-off state is current.
+            _description.ForceMeshUpdate();
+            if (_description.isTextTruncated)
+                _fullDescription?.Show(_description.rectTransform, _hoveredRow.RowName, _description.text);
         }
 
         private void Close()
@@ -251,6 +283,9 @@ namespace ModUtils
 
         private void Update()
         {
+            if (Time.unscaledTime >= _unfoldTime)
+                UnfoldDescription();
+
             // The gamepad back button closes the panel like Escape, as it closes the game's own dialogs.
             if (_closed || !(ZInput.GetKeyDown(KeyCode.Escape) || ZInput.GetButtonDown("JoyButtonB")) ||
                 IsEscapeConsumed())
@@ -334,6 +369,7 @@ namespace ModUtils
                 preferredHeight: descriptionHeight);
 
             CreateFooter(templates);
+            _fullDescription = ConfigurationGuiFullDescription.Create(transform, templates);
             CreateSections(rows, content, templates);
 
             ApplyFilter();
@@ -583,6 +619,7 @@ namespace ModUtils
 
             var hover = rowRect.gameObject.AddComponent<ConfigurationGuiRowHover>();
             hover.Panel = this;
+            hover.RowName = row.Name;
             hover.Description = row.Description;
 
             var name = ConfigurationGuiTemplates.CreateText(rowRect, "Name", templates.Label);
@@ -739,17 +776,25 @@ namespace ModUtils
     {
         internal string Description;
         internal ConfigurationGuiPanel Panel;
+        internal string RowName;
 
         public void OnPointerEnter(PointerEventData eventData)
         {
             if (Panel != null)
-                Panel.ShowDescription(Description);
+                Panel.ShowDescription(this);
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
             if (Panel != null)
-                Panel.ShowDescription("");
+                Panel.ShowDescription(null);
+        }
+
+        // A row that becomes inactive gets no pointer exit, so it clears its own description.
+        private void OnDisable()
+        {
+            if (Panel != null && Panel.HoveredRow == this)
+                Panel.ShowDescription(null);
         }
     }
 }

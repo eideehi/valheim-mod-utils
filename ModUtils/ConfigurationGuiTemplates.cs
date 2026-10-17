@@ -46,6 +46,11 @@ namespace ModUtils
 
         internal TMP_InputField InputField { get; private set; }
 
+        /// <summary>
+        /// The frame image of the vanilla Settings tooltips, or null when the screen has none.
+        /// </summary>
+        internal Image TooltipFrame { get; private set; }
+
         internal static ConfigurationGuiTemplates Find(Settings settings)
         {
             var gameplay = settings.GetComponentInChildren<GameplaySettings>(true);
@@ -84,6 +89,11 @@ namespace ModUtils
             }
 
             templates.Scrollbar = scrollRect != null ? scrollRect.verticalScrollbar : null;
+
+            // Looked up as a Settings tooltip looks up its own frame: by name under its tooltip object.
+            var tooltip = GetField<GameObject>(FindVanilla<SettingsTooltip>(settings), "m_tooltip");
+            var frame = tooltip != null ? Utils.FindChild(tooltip.transform, "Background") : null;
+            templates.TooltipFrame = frame != null ? frame.GetComponent<Image>() : null;
 
             return templates;
         }

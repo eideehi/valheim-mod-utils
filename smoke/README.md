@@ -45,7 +45,7 @@ Launch Valheim after deploying. The plugin logs individual smoke results and one
 summary line to the BepInEx log:
 
 ```text
-[ModUtils Smoke] Summary: total=33 passed=33 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
+[ModUtils Smoke] Summary: total=34 passed=34 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
 ```
 
 The plugin also registers sample entries for the in-game config screen, including
@@ -61,8 +61,9 @@ The smoke checks create temporary translation files only under
 config screen checks save `settings-gui-list.png`, `settings-gui-panel.png` (the
 top of the panel with the search line, and the footer),
 `settings-gui-panel-bottom.png` (the panel scrolled to its bottom with the
-multi-select list expanded) and `settings-gui-discard-prompt.png` (the prompt
-that Back shows while changes are not applied) under
+multi-select list expanded), `settings-gui-description.png` (a long description
+unfolded over the list) and `settings-gui-discard-prompt.png` (the prompt that
+Back shows while changes are not applied) under
 `BepInEx/config/ModUtilsSmoke/ui/` and keep them for review.
 
 ## Remove

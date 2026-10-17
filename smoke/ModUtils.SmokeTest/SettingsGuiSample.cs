@@ -64,8 +64,20 @@ namespace ModUtils.SmokeTest
                 if (nonNegative.Value < 0)
                     nonNegative.Value = 0;
             };
+            // The description is longer than the area below the list, so the config screen unfolds it.
             var text = configuration.Bind(EditorsSection, "text", "Hello, Valheim",
-                initializer: Describe(EditorsCategory, "Text", "A string entry, edited as text."));
+                initializer: Describe(EditorsCategory, "Text",
+                    "A string entry, edited as text. Its description is long on purpose. The area below the " +
+                    "list shows only the first lines of a description, so the config screen unfolds the " +
+                    "whole text over the list once the pointer has stayed on the row for a moment, and " +
+                    "folds it again when the pointer moves to another row or leaves the list. Mods with " +
+                    "many options often explain each one at length: what the option changes, when it takes " +
+                    "effect, which values make sense, how it works together with other options, and what " +
+                    "to expect in multiplayer, where the server and every client may need the same value. " +
+                    "Descriptions of several hundred characters are therefore common, and the longest ones " +
+                    "come close to nine hundred. The sentences after the first one only make this " +
+                    "description long enough to need unfolding at any common screen size, so that the " +
+                    "smoke check can show the unfolded text in its screenshot."));
             var colorCode = configuration.Bind(EditorsSection, "color_code", "#4FA9FF",
                 initializer: Describe(EditorsCategory, "Colour code",
                     "A colour code entry, edited as text with a swatch of the colour."));

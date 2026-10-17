@@ -14,7 +14,8 @@ namespace ModUtils.SmokeTest
 {
     /// <summary>
     /// Checks of the mod panel's pending changes, Apply, Reset all, the discard prompt, search, the
-    /// advanced toggle and the editors that the smoke plugin registers.
+    /// advanced toggle, the unfolding of a long description and the editors that the smoke plugin
+    /// registers.
     /// </summary>
     public sealed partial class SmokePlugin
     {
@@ -31,6 +32,11 @@ namespace ModUtils.SmokeTest
         private const string WidgetButtonName = "Button";
         private const string WidgetLabelName = "Label";
         private const string DiscardPromptScreenshot = "settings-gui-discard-prompt.png";
+        private const string FullDescriptionName = "FullDescription";
+        private const string DescriptionScreenshot = "settings-gui-description.png";
+
+        // Longer than the half second that the pointer must stay on a row before its description unfolds.
+        private const float UnfoldWaitSeconds = 1f;
 
         // UnifiedPopup shows Yes on its right button and No on its left button.
         private const string PopupYesButtonField = "buttonRight";
@@ -561,6 +567,50 @@ namespace ModUtils.SmokeTest
             }
         }
 
+        private IEnumerator CheckLongDescriptionUnfolds(SettingsGuiState state)
+        {
+            yield return OpenFreshPanel(state);
+            var panel = FindOpenPanel(state);
+            var longEntry = FindSampleEntry<string>(TextIdentity);
+            var longRow = FindRow(panel, longEntry);
+            Expect(longRow != null, $"no shown row for {TextIdentity}");
+            var shortEntry = _guiSample.ToggleEntry;
+            var shortIdentity = SettingsGuiSample.Identity(shortEntry);
+            var shortRow = FindRow(panel, shortEntry);
+            Expect(shortRow != null, $"no shown row for {shortIdentity}");
+
+            // The rows' own handlers, called as the event system calls them when the pointer moves.
+            SendPointerEvent(longRow, ExecuteEvents.pointerEnterHandler);
+            yield return null;
+            Expect(FindFullDescription(panel) == null,
+                $"the full description of {TextIdentity} is shown as soon as the pointer enters its row");
+
+            yield return new WaitForSecondsRealtime(UnfoldWaitSeconds);
+            var overlay = FindFullDescription(panel);
+            Expect(overlay != null,
+                $"the panel shows no {FullDescriptionName} after the pointer stayed on the row for " +
+                $"{TextIdentity} for {UnfoldWaitSeconds:0.0} seconds");
+            var attributes = longEntry.Description.Tags.OfType<ConfigurationManagerAttributes>().First();
+            var texts = overlay.GetComponentsInChildren<TMP_Text>(false).Select(x => x.text).ToList();
+            Expect(texts.Contains(attributes.DispName) && texts.Contains(attributes.Description),
+                $"the {FullDescriptionName} shows [{string.Join(" | ", texts)}], expected the row name " +
+                $"[{attributes.DispName}] and the whole description of {TextIdentity}");
+            yield return CaptureScreenshot(DescriptionScreenshot);
+
+            SendPointerEvent(longRow, ExecuteEvents.pointerExitHandler);
+            SendPointerEvent(shortRow, ExecuteEvents.pointerEnterHandler);
+            yield return null;
+            Expect(FindFullDescription(panel) == null,
+                $"the full description of {TextIdentity} is still shown after the pointer moved to the row " +
+                $"for {shortIdentity}");
+
+            yield return new WaitForSecondsRealtime(UnfoldWaitSeconds);
+            Expect(FindFullDescription(panel) == null,
+                $"the panel shows a {FullDescriptionName} after the pointer stayed on the row for " +
+                $"{shortIdentity}, whose description fits, for {UnfoldWaitSeconds:0.0} seconds");
+            SendPointerEvent(shortRow, ExecuteEvents.pointerExitHandler);
+        }
+
         private IEnumerator CheckBackWithPendingAsks(SettingsGuiState state)
         {
             RequirePrecondition(UnifiedPopup.IsAvailable(), "the game's popup is not available");
@@ -722,6 +772,21 @@ namespace ModUtils.SmokeTest
             press.pointerCurrentRaycast = hit;
             press.pointerPressRaycast = hit;
             return press;
+        }
+
+        private static void SendPointerEvent<T>(Transform target, ExecuteEvents.EventFunction<T> handler)
+            where T : IEventSystemHandler
+        {
+            ExecuteEvents.Execute(target.gameObject, new PointerEventData(EventSystem.current), handler);
+        }
+
+        /// <summary>
+        /// The panel's overlay with a row's whole description, if it is shown.
+        /// </summary>
+        private static Transform FindFullDescription(Transform panel)
+        {
+            var overlay = FindChild(panel, FullDescriptionName);
+            return overlay != null && overlay.gameObject.activeInHierarchy ? overlay : null;
         }
 
         private static void PressPopupButton(string fieldName)
