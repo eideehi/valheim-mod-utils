@@ -26,6 +26,8 @@ namespace ModUtils
         private const int RowPadding = 2;
         private const float RowSpacing = 8f;
         private const float SectionRowSpacing = 2f;
+        // As tall as a single-line row with its spacing, so headers stand out from the controls.
+        private const float SectionHeaderHeight = RowMinHeight + SectionRowSpacing;
         private const int WheelStepRows = 3;
         private const float NameMinWidth = 120f;
         private const float EditorMinWidth = 200f;
@@ -535,15 +537,16 @@ namespace ModUtils
         private Section CreateSection(string category, RectTransform content, ConfigurationGuiTemplates templates)
         {
             var header = ConfigurationGuiTemplates.Clone(templates.Button, content, "Section");
-            var height = ConfigurationGuiTemplates.ControlHeight(templates.Button);
-            ConfigurationGuiTemplates.AddLayout(header.gameObject, minHeight: height, preferredHeight: height);
+            ConfigurationGuiTemplates.AddLayout(header.gameObject, minHeight: SectionHeaderHeight,
+                preferredHeight: SectionHeaderHeight);
 
-            var headerLabel = header.GetComponentInChildren<TMP_Text>(true);
+            // The title has the row names' size and left edge, in bold.
+            var headerLabel = ConfigurationGuiTemplates.SetFixedButtonLabel(header, templates.Label,
+                alignment: TextAlignmentOptions.MidlineLeft);
             if (headerLabel != null)
             {
                 headerLabel.richText = false;
-                headerLabel.alignment = TextAlignmentOptions.MidlineLeft;
-                headerLabel.margin = new Vector4(12f, 0f, 12f, 0f);
+                headerLabel.fontStyle = FontStyles.Bold;
                 headerLabel.text = "- " + category;
             }
 

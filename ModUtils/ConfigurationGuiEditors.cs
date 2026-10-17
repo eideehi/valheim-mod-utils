@@ -401,6 +401,14 @@ namespace ModUtils
             var height = ConfigurationGuiTemplates.ControlHeight(templates.Dropdown);
             ConfigurationGuiTemplates.FillWidth((RectTransform)_dropdown.transform, height);
 
+            // The vanilla caption shrinks with the lower control; it keeps the row label's size on one line
+            // instead, in its place beside the arrow, and a caption too long for it is cut off.
+            var caption = _dropdown.captionText;
+            caption.enableAutoSizing = false;
+            caption.fontSize = templates.Label.fontSize;
+            caption.textWrappingMode = TextWrappingModes.NoWrap;
+            caption.overflowMode = TextOverflowModes.Truncate;
+
             var type = Entry.SettingType;
             var acceptableValues = Entry.Description?.AcceptableValues;
             foreach (var value in Enum.GetValues(type))
