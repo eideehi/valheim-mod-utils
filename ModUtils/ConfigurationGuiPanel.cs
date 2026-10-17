@@ -122,7 +122,8 @@ namespace ModUtils
         /// Shows the description of <paramref name="row"/> in the area below the list, or clears the area
         /// when <paramref name="row"/> is null. A description that the area cuts off unfolds in full over
         /// the list once the pointer has stayed on the row for <see cref="UnfoldDelay"/> seconds; any
-        /// hover change or mouse button press folds it again.
+        /// hover change or mouse button press folds it again, and it does not unfold while a text field is
+        /// being edited.
         /// </summary>
         internal void ShowDescription(ConfigurationGuiRowHover row)
         {
@@ -141,10 +142,21 @@ namespace ModUtils
         private void UnfoldDescription()
         {
             _unfoldTime = float.PositiveInfinity;
+            // Typing into a focused field involves no press, so the overlay must not cover the list then.
+            if (IsEditingText())
+                return;
+
             // The text was set on an earlier frame; this makes sure the cut-off state is current.
             _description.ForceMeshUpdate();
             if (_description.isTextTruncated)
                 _fullDescription?.Show(_description.rectTransform, _hoveredRow.RowName, _description.text);
+        }
+
+        private static bool IsEditingText()
+        {
+            var selected = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
+            var input = selected != null ? selected.GetComponent<TMP_InputField>() : null;
+            return input != null && input.isFocused;
         }
 
         // Pressing a button on a row means the user is working with it, so its description stays folded
