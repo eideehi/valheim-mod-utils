@@ -421,8 +421,7 @@ namespace ModUtils.SmokeTest
             yield return OpenFreshPanel(state, () => mark = _guiErrors.Count);
             var panel = FindOpenPanel(state);
 
-            ExpectShownRows(panel, _guiSample.VisibleEntries.Select(SettingsGuiSample.Identity),
-                "with the failing editors");
+            ExpectShownRows(panel, GetListedRowIdentities(), "with the failing editors");
 
             foreach (var entry in new ConfigEntryBase[] { _guiSample.BrokenFactoryEntry, _guiSample.BrokenBuildEntry })
             {
@@ -479,8 +478,7 @@ namespace ModUtils.SmokeTest
 
             search.text = "";
             yield return null;
-            ExpectShownRows(panel, _guiSample.VisibleEntries.Select(SettingsGuiSample.Identity),
-                "after clearing the search");
+            ExpectShownRows(panel, GetListedRowIdentities(), "after clearing the search");
 
             // A section collapsed before the search opens for a match and closes again afterwards.
             keysAndLists.onClick.Invoke();
@@ -501,8 +499,7 @@ namespace ModUtils.SmokeTest
 
             keysAndLists.onClick.Invoke();
             yield return null;
-            ExpectShownRows(panel, _guiSample.VisibleEntries.Select(SettingsGuiSample.Identity),
-                "after expanding the section again");
+            ExpectShownRows(panel, GetListedRowIdentities(), "after expanding the section again");
             ExpectApplyInteractable(panel, false, "after searching");
         }
 

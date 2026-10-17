@@ -32,6 +32,14 @@ namespace ModUtils
         internal const string PressKeyKey = "@config_gui_press_key";
         internal const string ClearKey = "@config_gui_clear";
 
+        // Configuration.Bind looks up an entry's texts by its section and key, which give these keys.
+        private const string ShowOnSettingsScreenSection = "mod_utils";
+        private const string ShowOnSettingsScreenKey = "show_on_settings_screen";
+        private const string ShowOnSettingsScreenCategoryKey = "@config_mod_utils_section";
+        private const string ShowOnSettingsScreenNameKey = "@config_mod_utils_show_on_settings_screen_name";
+        private const string ShowOnSettingsScreenDescriptionKey =
+            "@config_mod_utils_show_on_settings_screen_description";
+
         // Every ModUtils copy in the process finds the shared tab through these names, so they never change.
         internal const string PageName = "ModUtils.ModsTab.v1";
         internal const string TabButtonName = "ModUtils.ModsTab.v1.Button";
@@ -68,7 +76,16 @@ namespace ModUtils
                         { ShowAdvancedKey, "Show advanced settings" },
                         { ReadOnlyKey, "Read-only" },
                         { PressKeyKey, "Press a key..." },
-                        { ClearKey, "Clear" }
+                        { ClearKey, "Clear" },
+                        { ShowOnSettingsScreenCategoryKey, "Settings screen" },
+                        { ShowOnSettingsScreenNameKey, "Show on the Settings screen" },
+                        {
+                            ShowOnSettingsScreenDescriptionKey,
+                            "Shows this mod on the Mods tab of the game's Settings screen. When no mod is shown " +
+                            "there, the tab is not added. A change applies the next time the Settings screen " +
+                            "opens. After turning this off, turn it back on in ConfigurationManager or in this " +
+                            "mod's config file."
+                        }
                     }
                 },
                 {
@@ -95,7 +112,17 @@ namespace ModUtils
                         },
                         { ReadOnlyKey, "\u8AAD\u307F\u53D6\u308A\u5C02\u7528" },
                         { PressKeyKey, "\u30AD\u30FC\u3092\u62BC\u3057\u3066\u304F\u3060\u3055\u3044..." },
-                        { ClearKey, "\u30AF\u30EA\u30A2" }
+                        { ClearKey, "\u30AF\u30EA\u30A2" },
+                        { ShowOnSettingsScreenCategoryKey, "\u8A2D\u5B9A\u753B\u9762" },
+                        { ShowOnSettingsScreenNameKey, "\u8A2D\u5B9A\u753B\u9762\u306B\u8868\u793A" },
+                        {
+                            ShowOnSettingsScreenDescriptionKey,
+                            "\u30B2\u30FC\u30E0\u306E\u8A2D\u5B9A\u753B\u9762\u306E\u300CMod\u300D\u30BF\u30D6\u306B\u3053\u306E Mod \u3092\u8868\u793A\u3057\u307E\u3059\u3002" +
+                            "\u8868\u793A\u3059\u308B Mod \u304C\u3072\u3068\u3064\u3082\u306A\u3044\u3068\u304D\u306F\u3001\u30BF\u30D6\u306F\u8FFD\u52A0\u3055\u308C\u307E\u305B\u3093\u3002" +
+                            "\u5909\u66F4\u306F\u6B21\u306B\u8A2D\u5B9A\u753B\u9762\u3092\u958B\u3044\u305F\u3068\u304D\u306B\u53CD\u6620\u3055\u308C\u307E\u3059\u3002" +
+                            "\u30AA\u30D5\u306B\u3057\u305F\u3042\u3068\u3067\u623B\u3059\u3068\u304D\u306F\u3001" +
+                            "ConfigurationManager \u304B\u3053\u306E Mod \u306E\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3067\u5909\u66F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
+                        }
                     }
                 }
             };
@@ -114,6 +141,13 @@ namespace ModUtils
         /// the Harmony id <c>net.eideehi.modutils.configurationgui.&lt;plugin GUID&gt;</c>. A project that
         /// compiles the ModUtils sources must reference <c>Unity.TextMeshPro</c> from
         /// <c>valheim_Data/Managed</c>.
+        /// <para>
+        /// It also binds the bool entry <c>[mod_utils] show_on_settings_screen</c>, default true, in the
+        /// plugin's config, which saves the config file as any bind does while
+        /// <see cref="ConfigFile.SaveOnConfigSet"/> is true. While the entry is false, the plugin is not
+        /// listed, and the tab is not added when no plugin is listed. A change applies the next time the
+        /// Settings screen opens.
+        /// </para>
         /// </remarks>
         /// <param name="plugin">The plugin whose configuration is shown.</param>
         public static void Register(BaseUnityPlugin plugin)
@@ -123,9 +157,15 @@ namespace ModUtils
             var metadata = plugin.Info.Metadata;
             if (Plugins.Any(x => string.Equals(x.Guid, metadata.GUID, StringComparison.Ordinal))) return;
 
-            Plugins.Add(new ConfigurationGuiPlugin(metadata.GUID, metadata.Name, metadata.Version,
-                plugin.Config));
+            // The bind reads the entry's texts from the game's localization at once. Without a localization
+            // yet, the first language setting adds the texts and refreshes the entry.
             RegisterTranslations();
+            ConfigurationCustomDrawer.EnsureDefaultTranslations();
+            var showOnSettingsScreen = new Configuration(plugin.Config, new L10N(L10NPrefix))
+                .Bind(ShowOnSettingsScreenSection, ShowOnSettingsScreenKey, true);
+
+            Plugins.Add(new ConfigurationGuiPlugin(metadata.GUID, metadata.Name, metadata.Version,
+                plugin.Config, showOnSettingsScreen));
             ApplyPatch(metadata.GUID);
         }
 
@@ -254,7 +294,8 @@ namespace ModUtils
 
         private static void AddModsTab(Settings settings)
         {
-            if (Plugins.Count == 0) return;
+            // With no plugin to list, this copy adds neither the tab nor a button.
+            if (!Plugins.Any(x => x.ShowOnSettingsScreen.Value)) return;
 
             var tabHandler = settings.GetComponentInChildren<TabHandler>();
             if (tabHandler == null || tabHandler.m_tabs == null || tabHandler.m_tabs.Count == 0) return;
@@ -450,6 +491,7 @@ namespace ModUtils
 
             foreach (var plugin in Plugins)
             {
+                if (!plugin.ShowOnSettingsScreen.Value) continue;
                 if (FindChild(list, plugin.Guid) != null) continue;
 
                 var buttonObject = Object.Instantiate(template.gameObject, list, false);
@@ -491,12 +533,14 @@ namespace ModUtils
 
     internal sealed class ConfigurationGuiPlugin
     {
-        internal ConfigurationGuiPlugin(string guid, string name, System.Version version, ConfigFile config)
+        internal ConfigurationGuiPlugin(string guid, string name, System.Version version, ConfigFile config,
+            ConfigEntry<bool> showOnSettingsScreen)
         {
             Guid = guid;
             Name = name;
             Version = version;
             Config = config;
+            ShowOnSettingsScreen = showOnSettingsScreen;
         }
 
         internal string Guid { get; }
@@ -506,5 +550,10 @@ namespace ModUtils
         internal System.Version Version { get; }
 
         internal ConfigFile Config { get; }
+
+        /// <summary>
+        /// Whether the plugin is listed on the Mods tab; read each time the Settings screen opens.
+        /// </summary>
+        internal ConfigEntry<bool> ShowOnSettingsScreen { get; }
     }
 }

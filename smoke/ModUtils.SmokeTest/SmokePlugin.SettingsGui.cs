@@ -24,7 +24,29 @@ namespace ModUtils.SmokeTest
         private const string ModListName = "List";
         private const string PanelsName = "Panels";
 
+        // The entry that ModUtils binds in this plugin's config to list the plugin on the Mods tab.
+        private const string VisibilityEntrySection = "mod_utils";
+        private const string VisibilityEntryKey = "show_on_settings_screen";
+        private const string VisibilityEntryIdentity = VisibilityEntrySection + "/" + VisibilityEntryKey;
+
+        // ModUtils' texts for that entry, written out so that the checks do not take them from ModUtils.
+        private const string VisibilityEntryCategory = "Settings screen";
+        private const string VisibilityEntryName = "Show on the Settings screen";
+        private const string VisibilityEntryDescription =
+            "Shows this mod on the Mods tab of the game's Settings screen. When no mod is shown there, the tab " +
+            "is not added. A change applies the next time the Settings screen opens. After turning this off, " +
+            "turn it back on in ConfigurationManager or in this mod's config file.";
+        private const string VisibilityEntryCategoryJapanese = "\u8A2D\u5B9A\u753B\u9762";
+        private const string VisibilityEntryNameJapanese = "\u8A2D\u5B9A\u753B\u9762\u306B\u8868\u793A";
+        private const string VisibilityEntryDescriptionJapanese =
+            "\u30B2\u30FC\u30E0\u306E\u8A2D\u5B9A\u753B\u9762\u306E\u300CMod\u300D\u30BF\u30D6\u306B\u3053\u306E Mod \u3092\u8868\u793A\u3057\u307E\u3059\u3002" +
+            "\u8868\u793A\u3059\u308B Mod \u304C\u3072\u3068\u3064\u3082\u306A\u3044\u3068\u304D\u306F\u3001\u30BF\u30D6\u306F\u8FFD\u52A0\u3055\u308C\u307E\u305B\u3093\u3002" +
+            "\u5909\u66F4\u306F\u6B21\u306B\u8A2D\u5B9A\u753B\u9762\u3092\u958B\u3044\u305F\u3068\u304D\u306B\u53CD\u6620\u3055\u308C\u307E\u3059\u3002" +
+            "\u30AA\u30D5\u306B\u3057\u305F\u3042\u3068\u3067\u623B\u3059\u3068\u304D\u306F\u3001" +
+            "ConfigurationManager \u304B\u3053\u306E Mod \u306E\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3067\u5909\u66F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002";
+
         private const string RowNamePrefix = "Row:";
+        private const string RowLabelName = "Name";
         private const string EditorSlotName = "Editor";
         private const string ResetButtonName = "Reset";
         private const string FooterName = "Footer";
@@ -72,11 +94,18 @@ namespace ModUtils.SmokeTest
             }
 
             RunCleanupAction("restore the sample defaults", () => _guiSample.RestoreDefaults());
+            // The checks use this plugin's button, so the plugin is listed for them whatever the user chose,
+            // and the user's choice is put back afterwards.
+            var visibilityEntry = FindVisibilityEntry();
+            var listedBefore = visibilityEntry != null && visibilityEntry.Value;
+            if (visibilityEntry != null)
+                RunCleanupAction("list this plugin on the Mods tab", () => visibilityEntry.Value = true);
             Application.logMessageReceived += OnGuiLogMessage;
 
             var state = new SettingsGuiState(Info.Metadata.GUID);
             var checks = new List<KeyValuePair<string, Func<IEnumerator>>>
             {
+                UiCheck("settings_gui_visibility_entry_is_bound", CheckVisibilityEntryIsBound),
                 UiCheck("settings_gui_adds_one_mods_tab", () => CheckAddsOneModsTab(state)),
                 UiCheck("settings_gui_reopen_keeps_one_mods_tab", () => CheckReopenKeepsOneModsTab(state)),
                 UiCheck("settings_gui_mod_list_shows_plugin", () => CheckModListShowsPlugin(state)),
@@ -105,6 +134,7 @@ namespace ModUtils.SmokeTest
                 UiCheck("settings_gui_tab_switch_closes_panel", () => CheckTabSwitchClosesPanel(state)),
                 UiCheck("settings_gui_tab_switch_discards_pending", () => CheckTabSwitchDiscardsPending(state)),
                 UiCheck("settings_gui_ok_callback_runs_once", () => CheckOkCallbackRunsOnce(state)),
+                UiCheck("settings_gui_hidden_mod_has_no_button", () => CheckHiddenModHasNoButton(state)),
                 UiCheck("settings_gui_ok_closes_settings", CheckOkClosesSettings)
             };
 
@@ -113,6 +143,9 @@ namespace ModUtils.SmokeTest
 
             Application.logMessageReceived -= OnGuiLogMessage;
             RunCleanupAction("restore the sample defaults", () => _guiSample.RestoreDefaults());
+            if (visibilityEntry != null)
+                RunCleanupAction("restore whether this plugin is listed on the Mods tab",
+                    () => visibilityEntry.Value = listedBefore);
             if (Settings.instance != null)
             {
                 RunCleanupAction("close the settings screen", () => Settings.instance.OnBack());
@@ -243,6 +276,34 @@ namespace ModUtils.SmokeTest
             }
         }
 
+        private IEnumerator CheckVisibilityEntryIsBound()
+        {
+            var definition = new ConfigDefinition(VisibilityEntrySection, VisibilityEntryKey);
+            Expect(Config.ContainsKey(definition), $"this plugin's config has no entry {VisibilityEntryIdentity}");
+            var entry = Config[definition] as ConfigEntry<bool>;
+            Expect(entry != null,
+                $"{VisibilityEntryIdentity} is a {Config[definition].SettingType.Name} entry, expected a Boolean one");
+            Expect((bool)entry.DefaultValue, $"{VisibilityEntryIdentity} defaults to {entry.DefaultValue}, expected True");
+
+            var attributes = entry.Description?.Tags?.OfType<ConfigurationManagerAttributes>().FirstOrDefault();
+            Expect(attributes != null, $"{VisibilityEntryIdentity} has no ConfigurationManagerAttributes");
+            Expect(attributes.IsAdvanced != true, $"{VisibilityEntryIdentity} is marked advanced");
+            Expect(attributes.ReadOnly != true, $"{VisibilityEntryIdentity} is marked read-only");
+
+            var texts = GetVisibilityEntryTexts();
+            foreach (var (what, shown, expected) in new[]
+                     {
+                         ("category", attributes.Category, texts.Category),
+                         ("name", attributes.DispName, texts.Name),
+                         ("description", attributes.Description, texts.Description),
+                         ("stored description", entry.Description.Description, texts.Description)
+                     })
+                Expect(string.Equals(shown, expected, StringComparison.Ordinal),
+                    $"the {what} of {VisibilityEntryIdentity} is [{shown}], expected [{expected}]");
+
+            yield break;
+        }
+
         private IEnumerator CheckAddsOneModsTab(SettingsGuiState state)
         {
             FejdStartup.instance.OnButtonSettings();
@@ -304,7 +365,7 @@ namespace ModUtils.SmokeTest
             Expect(!state.List.gameObject.activeSelf, "the mod list is still shown while the panel is open");
 
             var shown = FindRows(panel).Select(x => x.name.Substring(RowNamePrefix.Length)).ToList();
-            var expected = _guiSample.VisibleEntries.Select(SettingsGuiSample.Identity).ToList();
+            var expected = GetListedRowIdentities();
             var missing = expected.Except(shown).ToList();
             var unexpected = shown.Except(expected).ToList();
             var duplicated = shown.GroupBy(x => x).Where(x => x.Count() > 1).Select(x => x.Key).ToList();
@@ -313,7 +374,9 @@ namespace ModUtils.SmokeTest
                 $"unexpected=[{string.Join(", ", unexpected)}] duplicated=[{string.Join(", ", duplicated)}]");
 
             // No sample entry sets an Order, so sections follow the order in which their entries are bound,
-            // and so do the rows within each section.
+            // and so do the rows within each section. ModUtils binds its entry for the Mods tab last, when the
+            // plugin registers, in a section of its own.
+            var texts = GetVisibilityEntryTexts();
             var expectedPlaces = new[]
             {
                 (SettingsGuiSample.EditorsCategory, new[]
@@ -330,7 +393,8 @@ namespace ModUtils.SmokeTest
                 (SettingsGuiSample.CustomCategory, new[]
                 {
                     "custom/word_list", "custom/locked_word_list", "custom/broken_factory", "custom/broken_build"
-                })
+                }),
+                (texts.Category, new[] { VisibilityEntryIdentity })
             }.SelectMany(x => x.Item2.Select(identity => x.Item1 + " > " + identity)).ToList();
             var shownPlaces = FindRows(panel)
                               .Select(x => GetRowSectionCategory(x) + " > " + x.name.Substring(RowNamePrefix.Length))
@@ -338,6 +402,20 @@ namespace ModUtils.SmokeTest
             Expect(shownPlaces.SequenceEqual(expectedPlaces),
                 $"rows are not shown in their sections in bind order: shown=[{string.Join(", ", shownPlaces)}] " +
                 $"expected=[{string.Join(", ", expectedPlaces)}]");
+
+            var visibilityEntry = FindVisibilityEntry();
+            Expect(visibilityEntry != null, $"this plugin's config has no bool entry {VisibilityEntryIdentity}");
+            var visibilityRow = FindRow(panel, visibilityEntry);
+            Expect(visibilityRow != null, $"no shown row for {VisibilityEntryIdentity}");
+            var label = FindChild(visibilityRow, RowLabelName)?.GetComponent<TMP_Text>();
+            Expect(label != null && label.text == texts.Name,
+                $"the row for {VisibilityEntryIdentity} is named [{label?.text}], expected [{texts.Name}]");
+            var toggle = FindEditorWidget<Toggle>(panel, visibilityEntry);
+            Expect(toggle != null && toggle.interactable,
+                $"the row for {VisibilityEntryIdentity} shows no interactable Toggle");
+            var reset = FindChild(visibilityRow, ResetButtonName);
+            Expect(reset != null && reset.gameObject.activeInHierarchy && reset.GetComponent<Button>() != null,
+                $"the row for {VisibilityEntryIdentity} has no Reset button");
 
             yield return CaptureScreenshot("settings-gui-panel.png");
 
@@ -749,6 +827,42 @@ namespace ModUtils.SmokeTest
             yield break;
         }
 
+        private IEnumerator CheckHiddenModHasNoButton(SettingsGuiState state)
+        {
+            var entry = FindVisibilityEntry();
+            RequirePrecondition(entry != null, $"this plugin's config has no bool entry {VisibilityEntryIdentity}");
+
+            try
+            {
+                // Another mod can still add the tab, but this plugin has no button on it.
+                entry.Value = false;
+                yield return OpenNewSettings(state);
+                Expect(state.Settings != null, "the settings screen did not open with this plugin not listed");
+                Expect(state.TabHandler != null, "the settings screen opened with this plugin not listed has no TabHandler");
+                Expect(state.List == null || FindChild(state.List, state.Guid) == null,
+                    $"with {VisibilityEntryIdentity} off, the mod list has a button named {state.Guid}");
+                if (state.Page != null)
+                    Expect(state.List != null && state.List.childCount > 0,
+                        "with this plugin not listed, the Mods page was added without a mod to list");
+
+                entry.Value = true;
+                yield return OpenNewSettings(state);
+                Expect(state.Settings != null && state.TabHandler != null,
+                    "the settings screen did not open with this plugin listed again");
+                Expect(state.Page != null && state.List != null,
+                    $"with {VisibilityEntryIdentity} on again, the settings screen has no Mods page with a mod list");
+                state.TabHandler.SetActiveTab(state.ModsTabIndex, forceSelect: true);
+                yield return WaitFrames(2);
+                Expect(FindModButton(state) != null,
+                    $"with {VisibilityEntryIdentity} on again, the mod list shows no button named {state.Guid}");
+            }
+            finally
+            {
+                // The plugin stays listed until the suite puts the user's choice back.
+                entry.Value = true;
+            }
+        }
+
         private IEnumerator CheckOkClosesSettings()
         {
             var settings = Settings.instance;
@@ -769,6 +883,24 @@ namespace ModUtils.SmokeTest
         {
             for (var i = 0; i < SettingsCloseMaxFrames && Settings.instance != null; i++)
                 yield return null;
+        }
+
+        /// <summary>
+        /// Closes the settings screen if it is open and opens a new one, on which every ModUtils copy adds
+        /// the Mods tab and its buttons again.
+        /// </summary>
+        private static IEnumerator OpenNewSettings(SettingsGuiState state)
+        {
+            if (Settings.instance != null)
+            {
+                Settings.instance.OnBack();
+                yield return WaitForSettingsClosed();
+                Expect(Settings.instance == null, "Back did not close the settings screen");
+            }
+
+            FejdStartup.instance.OnButtonSettings();
+            yield return WaitFrames(SettingsOpenFrames);
+            state.Refresh();
         }
 
         /// <summary>
@@ -993,6 +1125,39 @@ namespace ModUtils.SmokeTest
             var swatch = slot != null ? FindChild(slot, SwatchName) : null;
             var fill = swatch != null && swatch.gameObject.activeInHierarchy ? FindChild(swatch, SwatchFillName) : null;
             return fill != null ? fill.GetComponent<Image>() : null;
+        }
+
+        /// <summary>
+        /// The entry that lists this plugin on the Mods tab, or null when the plugin's config has no bool
+        /// entry with its section and key.
+        /// </summary>
+        private ConfigEntry<bool> FindVisibilityEntry()
+        {
+            var definition = new ConfigDefinition(VisibilityEntrySection, VisibilityEntryKey);
+            return Config.ContainsKey(definition) ? Config[definition] as ConfigEntry<bool> : null;
+        }
+
+        /// <summary>
+        /// The category, name and description of the entry that lists this plugin on the Mods tab in the
+        /// game's language: Japanese for Japanese, English for every other language.
+        /// </summary>
+        private static (string Category, string Name, string Description) GetVisibilityEntryTexts()
+        {
+            var language = TryGetGameLocalization()?.GetSelectedLanguage();
+            return string.Equals(language, "Japanese", StringComparison.Ordinal)
+                ? (VisibilityEntryCategoryJapanese, VisibilityEntryNameJapanese, VisibilityEntryDescriptionJapanese)
+                : (VisibilityEntryCategory, VisibilityEntryName, VisibilityEntryDescription);
+        }
+
+        /// <summary>
+        /// Rows the panel lists with an empty search and advanced settings not shown: the sample's visible
+        /// entries and the entry that lists this plugin on the Mods tab.
+        /// </summary>
+        private List<string> GetListedRowIdentities()
+        {
+            return _guiSample.VisibleEntries.Select(SettingsGuiSample.Identity)
+                             .Concat(new[] { VisibilityEntryIdentity })
+                             .ToList();
         }
 
         private ConfigEntry<T> FindSampleEntry<T>(string identity)

@@ -174,8 +174,9 @@ namespace ModUtils
 
             ReloadTranslations(language);
             _currentLanguage = language;
-            RefreshConfigurationMetadata();
+            // Config texts can come from ModUtils' default translations, so those are added first.
             RefreshDefaultDrawerTranslations();
+            RefreshConfigurationMetadata();
 
             if (fireLanguageChanged)
                 FireLanguageChanged(language);

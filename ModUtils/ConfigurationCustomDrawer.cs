@@ -78,7 +78,7 @@ namespace ModUtils
                 RefreshDefaultTranslations();
         }
 
-        private static void EnsureDefaultTranslations()
+        internal static void EnsureDefaultTranslations()
         {
             if (_defaultTranslationsInitialized) return;
 
