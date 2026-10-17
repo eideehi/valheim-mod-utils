@@ -22,9 +22,11 @@ namespace ModUtils
     {
         private const float Padding = 8f;
         private const float Spacing = 6f;
-        private const float RowMinHeight = 36f;
+        private const float RowMinHeight = ConfigurationGuiTemplates.DefaultControlHeight + 2 * RowPadding;
         private const int RowPadding = 2;
         private const float RowSpacing = 8f;
+        private const float SectionRowSpacing = 2f;
+        private const int WheelStepRows = 3;
         private const float NameMinWidth = 120f;
         private const float EditorMinWidth = 200f;
         private const float ResetWidth = 120f;
@@ -433,7 +435,11 @@ namespace ModUtils
             scroll.horizontal = false;
             scroll.vertical = true;
             scroll.movementType = ScrollRect.MovementType.Clamped;
-            scroll.scrollSensitivity = templates.ScrollSensitivity;
+            // One wheel step moves the list by a few single-line rows. The UI input module's wheel delta
+            // depends on its configured units per tick, so ask it for the tick count.
+            scroll.scrollSensitivity = WheelStepRows * (RowMinHeight + SectionRowSpacing) *
+                                       EventSystem.current.currentInputModule
+                                           .ConvertPointerEventScrollDeltaToTicks(Vector2.up).y;
 
             if (templates.Scrollbar != null)
             {
@@ -461,7 +467,7 @@ namespace ModUtils
         private void CreateFooter(ConfigurationGuiTemplates templates)
         {
             var source = templates.BackButton != null ? templates.BackButton : templates.Button;
-            var height = ConfigurationGuiTemplates.ControlHeight(source);
+            var height = ConfigurationGuiTemplates.VanillaControlHeight(source);
             var width = Mathf.Clamp(((RectTransform)source.transform).rect.width, BackMinWidth, BackMaxWidth);
 
             var footer = ConfigurationGuiTemplates.CreateRect("Footer", transform);
@@ -543,7 +549,7 @@ namespace ModUtils
 
             var body = ConfigurationGuiTemplates.CreateRect("Rows", content);
             var layout = body.gameObject.AddComponent<VerticalLayoutGroup>();
-            layout.spacing = 2f;
+            layout.spacing = SectionRowSpacing;
             layout.childControlWidth = true;
             layout.childControlHeight = true;
             layout.childForceExpandWidth = true;

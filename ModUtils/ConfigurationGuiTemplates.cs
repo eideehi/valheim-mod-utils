@@ -16,10 +16,12 @@ namespace ModUtils
     /// </summary>
     internal sealed class ConfigurationGuiTemplates
     {
-        internal const float DefaultControlHeight = 36f;
+        // Controls inside a mod's panel are at most this high, lower than the vanilla widgets, so more rows
+        // fit in the list.
+        internal const float DefaultControlHeight = 30f;
         private const float MinControlHeight = 24f;
-        private const float MaxControlHeight = 56f;
-        private const float DefaultScrollSensitivity = 30f;
+        private const float DefaultVanillaControlHeight = 36f;
+        private const float MaxVanillaControlHeight = 56f;
         private const float ButtonTextMargin = 8f;
         private const float MinButtonTextScale = 0.8f;
         private const float ToggleLabelGap = 8f;
@@ -43,8 +45,6 @@ namespace ModUtils
         internal Scrollbar Scrollbar { get; private set; }
 
         internal TMP_InputField InputField { get; private set; }
-
-        internal float ScrollSensitivity { get; private set; }
 
         internal static ConfigurationGuiTemplates Find(Settings settings)
         {
@@ -84,9 +84,6 @@ namespace ModUtils
             }
 
             templates.Scrollbar = scrollRect != null ? scrollRect.verticalScrollbar : null;
-            templates.ScrollSensitivity = scrollRect != null && scrollRect.scrollSensitivity > 1f
-                ? scrollRect.scrollSensitivity
-                : DefaultScrollSensitivity;
 
             return templates;
         }
@@ -445,15 +442,25 @@ namespace ModUtils
         }
 
         /// <summary>
-        /// Height of a vanilla widget, limited to a range that fits one settings row.
+        /// Height of a control inside a mod's panel: the vanilla widget's height from
+        /// <see cref="VanillaControlHeight"/>, at most <see cref="DefaultControlHeight"/>.
         /// </summary>
         internal static float ControlHeight(Component source)
+        {
+            return Mathf.Min(VanillaControlHeight(source), DefaultControlHeight);
+        }
+
+        /// <summary>
+        /// Height of a vanilla widget, limited to a range that fits one settings row. The Mods list buttons
+        /// and the panel footer keep this vanilla size.
+        /// </summary>
+        internal static float VanillaControlHeight(Component source)
         {
             var rect = source != null ? source.transform as RectTransform : null;
             var height = rect != null ? rect.rect.height : 0f;
             return height >= 1f
-                ? Mathf.Clamp(height, MinControlHeight, MaxControlHeight)
-                : DefaultControlHeight;
+                ? Mathf.Clamp(height, MinControlHeight, MaxVanillaControlHeight)
+                : DefaultVanillaControlHeight;
         }
 
         private static T GetField<T>(object instance, string fieldName) where T : Object

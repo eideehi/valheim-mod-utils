@@ -434,7 +434,7 @@ namespace ModUtils
             var sourceRect = (RectTransform)buttonStyle.transform;
             ConfigurationGuiTemplates.AddLayout(template.gameObject,
                 preferredWidth: Mathf.Max(sourceRect.rect.width, ModButtonMinWidth),
-                preferredHeight: ConfigurationGuiTemplates.ControlHeight(buttonStyle));
+                preferredHeight: ConfigurationGuiTemplates.VanillaControlHeight(buttonStyle));
         }
 
         private static void AddPluginButtons(RectTransform page)
