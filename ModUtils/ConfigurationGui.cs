@@ -146,7 +146,8 @@ namespace ModUtils
         /// plugin's config, which saves the config file as any bind does while
         /// <see cref="ConfigFile.SaveOnConfigSet"/> is true. While the entry is false, the plugin is not
         /// listed, and the tab is not added when no plugin is listed. A change applies the next time the
-        /// Settings screen opens.
+        /// Settings screen opens. The plugin's panel has no row for the entry; it is changed in
+        /// ConfigurationManager or in the config file.
         /// </para>
         /// </remarks>
         /// <param name="plugin">The plugin whose configuration is shown.</param>

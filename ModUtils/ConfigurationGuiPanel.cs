@@ -236,9 +236,9 @@ namespace ModUtils
 
         /// <summary>
         /// Stages the default value of every row that can be edited, including rows that the advanced
-        /// toggle or the search hides. Read-only rows, also those of types without an editor, and hidden
-        /// (Browsable false) entries, which have no row, keep their values. The button is available once
-        /// every row is built.
+        /// toggle or the search hides. Read-only rows, also those of types without an editor, and entries
+        /// without a row (hidden by Browsable false, or the one that lists the plugin on the Mods tab) keep
+        /// their values. The button is available once every row is built.
         /// </summary>
         private void ResetAll()
         {
@@ -380,7 +380,7 @@ namespace ModUtils
         {
             _pending = new ConfigurationGuiPendingValues(plugin.Name);
             _templates = templates;
-            var rows = CreateRows(plugin.Config);
+            var rows = CreateRows(plugin);
 
             var layout = gameObject.AddComponent<VerticalLayoutGroup>();
             layout.padding = new RectOffset((int)Padding, (int)Padding, (int)Padding, (int)Padding);
@@ -604,11 +604,15 @@ namespace ModUtils
             return button;
         }
 
-        private static List<Row> CreateRows(ConfigFile config)
+        private static List<Row> CreateRows(ConfigurationGuiPlugin plugin)
         {
             var rows = new List<Row>();
-            foreach (var pair in config)
+            foreach (var pair in plugin.Config)
             {
+                // The entry that lists the plugin on the Mods tab is changed in ConfigurationManager or in the
+                // config file, not here.
+                if (ReferenceEquals(pair.Value, plugin.ShowOnSettingsScreen)) continue;
+
                 var row = Row.Create(pair.Value, rows.Count);
                 if (row != null)
                     rows.Add(row);

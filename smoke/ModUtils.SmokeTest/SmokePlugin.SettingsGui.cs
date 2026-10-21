@@ -374,8 +374,8 @@ namespace ModUtils.SmokeTest
                 $"unexpected=[{string.Join(", ", unexpected)}] duplicated=[{string.Join(", ", duplicated)}]");
 
             // No sample entry sets an Order, so sections follow the order in which their entries are bound,
-            // and so do the rows within each section. ModUtils binds its entry for the Mods tab last, when the
-            // plugin registers, in a section of its own.
+            // and so do the rows within each section. The entry that ModUtils binds for the Mods tab has no
+            // row and no section.
             var texts = GetVisibilityEntryTexts();
             var expectedPlaces = new[]
             {
@@ -393,8 +393,7 @@ namespace ModUtils.SmokeTest
                 (SettingsGuiSample.CustomCategory, new[]
                 {
                     "custom/word_list", "custom/locked_word_list", "custom/broken_factory", "custom/broken_build"
-                }),
-                (texts.Category, new[] { VisibilityEntryIdentity })
+                })
             }.SelectMany(x => x.Item2.Select(identity => x.Item1 + " > " + identity)).ToList();
             var shownPlaces = FindRows(panel)
                               .Select(x => GetRowSectionCategory(x) + " > " + x.name.Substring(RowNamePrefix.Length))
@@ -405,17 +404,10 @@ namespace ModUtils.SmokeTest
 
             var visibilityEntry = FindVisibilityEntry();
             Expect(visibilityEntry != null, $"this plugin's config has no bool entry {VisibilityEntryIdentity}");
-            var visibilityRow = FindRow(panel, visibilityEntry);
-            Expect(visibilityRow != null, $"no shown row for {VisibilityEntryIdentity}");
-            var label = FindChild(visibilityRow, RowLabelName)?.GetComponent<TMP_Text>();
-            Expect(label != null && label.text == texts.Name,
-                $"the row for {VisibilityEntryIdentity} is named [{label?.text}], expected [{texts.Name}]");
-            var toggle = FindEditorWidget<Toggle>(panel, visibilityEntry);
-            Expect(toggle != null && toggle.interactable,
-                $"the row for {VisibilityEntryIdentity} shows no interactable Toggle");
-            var reset = FindChild(visibilityRow, ResetButtonName);
-            Expect(reset != null && reset.gameObject.activeInHierarchy && reset.GetComponent<Button>() != null,
-                $"the row for {VisibilityEntryIdentity} has no Reset button");
+            Expect(FindRow(panel, visibilityEntry) == null, $"the panel shows a row for {VisibilityEntryIdentity}");
+            Expect(FindRows(panel).All(x => !string.Equals(GetRowSectionCategory(x), texts.Category,
+                       StringComparison.Ordinal)),
+                $"the panel shows a section named [{texts.Category}]");
 
             yield return CaptureScreenshot("settings-gui-panel.png");
 
@@ -1151,13 +1143,11 @@ namespace ModUtils.SmokeTest
 
         /// <summary>
         /// Rows the panel lists with an empty search and advanced settings not shown: the sample's visible
-        /// entries and the entry that lists this plugin on the Mods tab.
+        /// entries.
         /// </summary>
         private List<string> GetListedRowIdentities()
         {
-            return _guiSample.VisibleEntries.Select(SettingsGuiSample.Identity)
-                             .Concat(new[] { VisibilityEntryIdentity })
-                             .ToList();
+            return _guiSample.VisibleEntries.Select(SettingsGuiSample.Identity).ToList();
         }
 
         private ConfigEntry<T> FindSampleEntry<T>(string identity)
