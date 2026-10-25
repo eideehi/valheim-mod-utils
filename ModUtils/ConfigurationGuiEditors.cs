@@ -402,12 +402,19 @@ namespace ModUtils
             ConfigurationGuiTemplates.FillWidth((RectTransform)_dropdown.transform, height);
 
             // The vanilla caption shrinks with the lower control; it keeps the row label's size on one line
-            // instead, in its place beside the arrow, and a caption too long for it is cut off.
+            // instead, in its place beside the arrow, and a caption too long for it is cut off. It takes the
+            // control's full height, because Truncate draws nothing when a line is taller than its box.
             var caption = _dropdown.captionText;
             caption.enableAutoSizing = false;
             caption.fontSize = templates.Label.fontSize;
             caption.textWrappingMode = TextWrappingModes.NoWrap;
             caption.overflowMode = TextOverflowModes.Truncate;
+            var captionRect = caption.rectTransform;
+            captionRect.anchorMin = new Vector2(captionRect.anchorMin.x, 0f);
+            captionRect.anchorMax = new Vector2(captionRect.anchorMax.x, 1f);
+            captionRect.offsetMin = new Vector2(captionRect.offsetMin.x, 0f);
+            captionRect.offsetMax = new Vector2(captionRect.offsetMax.x, 0f);
+            caption.margin = new Vector4(caption.margin.x, 0f, caption.margin.z, 0f);
 
             var type = Entry.SettingType;
             var acceptableValues = Entry.Description?.AcceptableValues;

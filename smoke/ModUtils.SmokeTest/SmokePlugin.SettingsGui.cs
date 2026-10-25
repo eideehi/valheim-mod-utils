@@ -494,6 +494,10 @@ namespace ModUtils.SmokeTest
             var choiceEntry = _guiSample.ChoiceEntry;
             var dropdown = FindEditorWidget<TMP_Dropdown>(panel, choiceEntry);
             Expect(dropdown != null, $"the row for {SettingsGuiSample.Identity(choiceEntry)} has no TMP_Dropdown");
+            var caption = dropdown.captionText;
+            caption.ForceMeshUpdate();
+            Expect(caption.textInfo.characterInfo.Take(caption.textInfo.characterCount).Any(x => x.isVisible),
+                $"the dropdown caption [{caption.text}] shows no characters");
             var choices = Enum.GetValues(typeof(SampleChoice)).Cast<SampleChoice>().ToList();
             Expect(dropdown.options.Count == choices.Count,
                 $"expected {choices.Count} dropdown options, found {dropdown.options.Count}");
