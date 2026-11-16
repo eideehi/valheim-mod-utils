@@ -40,7 +40,7 @@ namespace ModUtils
 
         static L10N()
         {
-            InternalNamePattern = new Regex(@"^(\$|@)(\w|\d|[^\s(){}[\]+\-!?/\\&%,.:=<>])+$",
+            InternalNamePattern = new Regex(@"^[$@][^\s(){}[\]+\-!?/\\&%,.:=<>]+$",
                 RegexOptions.Compiled);
             TranslationCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             RuntimeWords = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -439,9 +439,18 @@ namespace ModUtils
         [SuppressMessage("ReSharper", "MemberCanBePrivate.Global")]
         public string TranslateInternalName(string internalName)
         {
-            return !IsInternalName(internalName)
-                ? internalName
-                : InvokeTranslate(GetTranslationKey(internalName));
+            if (IsInternalName(internalName))
+                return InvokeTranslate(GetTranslationKey(internalName));
+
+            // A name made of several internal names, such as "$a $b $c", is translated part by part.
+            if (string.IsNullOrEmpty(internalName) || internalName.IndexOf(' ') < 0)
+                return internalName;
+
+            var parts = internalName.Split(' ');
+            if (!Array.TrueForAll(parts, IsInternalName)) return internalName;
+
+            return string.Join(" ",
+                Array.ConvertAll(parts, part => InvokeTranslate(GetTranslationKey(part))));
         }
 
         [SuppressMessage("ReSharper", "MemberCanBePrivate.Global")]
