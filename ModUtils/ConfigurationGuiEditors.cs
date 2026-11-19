@@ -396,25 +396,7 @@ namespace ModUtils
 
         internal override float Build(RectTransform slot, ConfigurationGuiTemplates templates)
         {
-            _dropdown = ConfigurationGuiTemplates.Clone(templates.Dropdown, slot, "Dropdown");
-            HideVanillaTitle(_dropdown);
-            var height = ConfigurationGuiTemplates.ControlHeight(templates.Dropdown);
-            ConfigurationGuiTemplates.FillWidth((RectTransform)_dropdown.transform, height);
-
-            // The vanilla caption shrinks with the lower control; it keeps the row label's size on one line
-            // instead, in its place beside the arrow, and a caption too long for it is cut off. It takes the
-            // control's full height, because Truncate draws nothing when a line is taller than its box.
-            var caption = _dropdown.captionText;
-            caption.enableAutoSizing = false;
-            caption.fontSize = templates.Label.fontSize;
-            caption.textWrappingMode = TextWrappingModes.NoWrap;
-            caption.overflowMode = TextOverflowModes.Truncate;
-            var captionRect = caption.rectTransform;
-            captionRect.anchorMin = new Vector2(captionRect.anchorMin.x, 0f);
-            captionRect.anchorMax = new Vector2(captionRect.anchorMax.x, 1f);
-            captionRect.offsetMin = new Vector2(captionRect.offsetMin.x, 0f);
-            captionRect.offsetMax = new Vector2(captionRect.offsetMax.x, 0f);
-            caption.margin = new Vector4(caption.margin.x, 0f, caption.margin.z, 0f);
+            _dropdown = CreateDropdown(slot, templates, out var height);
 
             var type = Entry.SettingType;
             var acceptableValues = Entry.Description?.AcceptableValues;
@@ -428,6 +410,50 @@ namespace ModUtils
             Refresh();
             _dropdown.onValueChanged.AddListener(OnValueChanged);
             return height;
+        }
+
+        /// <summary>
+        /// Copies the game's dropdown into <paramref name="slot"/> at the slot's full width and
+        /// <paramref name="height"/> high, without options. Its caption keeps the row label's size on one
+        /// line.
+        /// </summary>
+        internal static TMP_Dropdown CreateDropdown(RectTransform slot, ConfigurationGuiTemplates templates,
+            out float height)
+        {
+            var dropdown = ConfigurationGuiTemplates.Clone(templates.Dropdown, slot, "Dropdown");
+            HideVanillaTitle(dropdown);
+            height = ConfigurationGuiTemplates.ControlHeight(templates.Dropdown);
+            ConfigurationGuiTemplates.FillWidth((RectTransform)dropdown.transform, height);
+
+            // The vanilla caption shrinks with the lower control; it keeps the row label's size on one line
+            // instead, in its place beside the arrow, and a caption too long for it is cut off. It takes the
+            // control's full height, because Truncate draws nothing when a line is taller than its box.
+            var caption = dropdown.captionText;
+            caption.enableAutoSizing = false;
+            caption.fontSize = templates.Label.fontSize;
+            caption.textWrappingMode = TextWrappingModes.NoWrap;
+            caption.overflowMode = TextOverflowModes.Truncate;
+            var captionRect = caption.rectTransform;
+            captionRect.anchorMin = new Vector2(captionRect.anchorMin.x, 0f);
+            captionRect.anchorMax = new Vector2(captionRect.anchorMax.x, 1f);
+            captionRect.offsetMin = new Vector2(captionRect.offsetMin.x, 0f);
+            captionRect.offsetMax = new Vector2(captionRect.offsetMax.x, 0f);
+            caption.margin = new Vector4(caption.margin.x, 0f, caption.margin.z, 0f);
+            return dropdown;
+        }
+
+        /// <summary>
+        /// For an Escape press: closes the dropdown's list when it is open and returns true, so the press
+        /// closes the list and leaves the view open.
+        /// </summary>
+        internal static bool CloseListOnEscape(TMP_Dropdown dropdown)
+        {
+            if (dropdown == null || !dropdown.IsExpanded) return false;
+
+            // The list fades out, so it still counts as open for the rest of the fade and takes the press
+            // again then; hiding it twice does nothing.
+            dropdown.Hide();
+            return true;
         }
 
         /// <summary>
@@ -475,6 +501,12 @@ namespace ModUtils
         internal override void SetInteractable(bool interactable)
         {
             _dropdown.interactable = interactable;
+        }
+
+        // An open list takes Escape: the press closes the list, and the view stays open.
+        internal override bool ConsumesEscape()
+        {
+            return CloseListOnEscape(_dropdown);
         }
 
         private void OnValueChanged(int index)

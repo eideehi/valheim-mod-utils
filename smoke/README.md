@@ -45,7 +45,7 @@ Launch Valheim after deploying. The plugin logs individual smoke results and one
 summary line to the BepInEx log:
 
 ```text
-[ModUtils Smoke] Summary: total=38 passed=38 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
+[ModUtils Smoke] Summary: total=39 passed=39 failed=0 skipped=0 failedChecks=[] skippedChecks=[]
 ```
 
 The plugin also registers sample entries for the in-game config screen, including
@@ -56,8 +56,10 @@ and its panel, and closes Settings again; leave the game alone until the summary
 line appears. These `settings_gui_*` checks are skipped when the main menu does
 not appear within a minute. They turn the plugin's
 `[mod_utils] show_on_settings_screen` entry on for their run and put its value
-back afterwards. The window that `ConfigurationGui.OpenEntryWindow` opens needs
-a world, so these checks only confirm that it is refused at the main menu.
+back afterwards. The windows that `ConfigurationGui.OpenEntryWindow` and
+`ConfigurationGui.OpenChoiceWindow` open need a world, so these checks only
+confirm that both are refused at the main menu, before the choice window calls
+any of its callbacks.
 
 The smoke checks create temporary translation files only under
 `BepInEx/config/ModUtilsSmoke/` and clean them up on a best-effort basis. The

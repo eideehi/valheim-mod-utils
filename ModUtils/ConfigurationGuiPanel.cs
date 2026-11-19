@@ -227,6 +227,7 @@ namespace ModUtils
 
             LayOutStack((int)Padding);
             CreateHeader($"{plugin.Name} v{plugin.Version}", null);
+            CreateStagedApplyHint();
             CreateFilter(templates, rows.Any(x => x.Advanced));
             var content = CreateScrollView(transform, templates);
             CreateDescriptionArea();
@@ -282,12 +283,7 @@ namespace ModUtils
 
             if (templates.InputField != null)
             {
-                // Filters on every change, so the end of an edit needs no action.
-                _search = ConfigurationGuiInputField.Create(templates, filter, "Search", _ => { });
-                // Escape leaves the field and keeps the search.
-                _search.Input.restoreOriginalTextOnEscape = false;
-                if (_search.Input.placeholder is TMP_Text placeholder)
-                    placeholder.text = ConfigurationGui.Translate(ConfigurationGui.SearchPlaceholderKey);
+                _search = CreateSearchField(filter, "Search");
                 ConfigurationGuiTemplates.AddLayout(_search.Input.gameObject, minWidth: EditorMinWidth,
                     preferredWidth: 0f, preferredHeight: fieldHeight, flexibleWidth: 1f);
                 _search.Input.onValueChanged.AddListener(_ => ApplyFilter());

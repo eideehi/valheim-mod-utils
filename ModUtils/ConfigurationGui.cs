@@ -13,8 +13,9 @@ using Object = UnityEngine.Object;
 namespace ModUtils
 {
     /// <summary>
-    /// In-game configuration screen reached from a "Mods" tab on the vanilla Settings screen, and a window
-    /// that shows chosen entries of a mod in a world.
+    /// In-game configuration screen reached from a "Mods" tab on the vanilla Settings screen, a window that
+    /// shows chosen entries of a mod in a world, and a window in a world whose dropdowns pass each choice to
+    /// the mod at once.
     /// </summary>
     public static class ConfigurationGui
     {
@@ -213,9 +214,9 @@ namespace ModUtils
         /// is pending, and else asks whether to discard the pending edits: Yes discards them and closes the
         /// window, No keeps it open with its edits. The question covers the window, so nothing in it takes
         /// clicks until it is answered. A focused editor, such as a text field or a key editor waiting for a
-        /// key, takes Escape first. The gamepad's back button closes the window as Escape does, although the
-        /// window is not built for gamepad navigation. <see cref="CloseEntryWindow"/> closes it without
-        /// asking.
+        /// key, takes Escape first, and so does an open dropdown list, which closes. The gamepad's back
+        /// button closes the window as Escape does, although the window is not built for gamepad
+        /// navigation. <see cref="CloseEntryWindow"/> closes it without asking.
         /// The window has no sections, no search and no advanced filter, so advanced entries show too.
         /// Entries that the panel never shows (<c>Browsable = false</c>, and the entry that
         /// <see cref="Register"/> binds) get no row.
@@ -233,7 +234,8 @@ namespace ModUtils
         /// <see cref="Register"/>, when <paramref name="entries"/> is empty, holds a null or an entry that
         /// is not in the plugin's <see cref="BaseUnityPlugin.Config"/>, or has no entry with a row, when no
         /// world is loaded, and when the game's Settings screen has nothing to copy. Returns false without a
-        /// warning while a window of this copy of ModUtils is open; close it first to show other entries.
+        /// warning while a window of this copy of ModUtils is open, an entry window or a choice window
+        /// (<see cref="IsWindowOpen"/>); close it first to show other entries.
         /// The first window that opens patches the game with the Harmony id
         /// <c>net.eideehi.modutils.configurationgui.&lt;plugin GUID&gt;</c>; the patches do nothing while
         /// no window is open.
@@ -258,7 +260,7 @@ namespace ModUtils
                 return false;
             }
 
-            if (ConfigurationGuiEntryWindow.IsOpen) return false;
+            if (ConfigurationGuiWindowShell.IsOpen) return false;
 
             ConfigurationCustomDrawer.RefreshDefaultTranslations();
             return ConfigurationGuiEntryWindow.Open(registered, title ?? "", note, entries.ToList(),
@@ -267,8 +269,9 @@ namespace ModUtils
 
         /// <summary>
         /// Closes the window that <see cref="OpenEntryWindow"/> opened, without asking and without writing
-        /// its pending edits, and takes down its discard prompt if it is shown. Does nothing when no window
-        /// is open. The game still takes no player input on the frame on which the window closes.
+        /// its pending edits, and takes down its discard prompt if it is shown. Does nothing when no entry
+        /// window is open; a choice window stays open. The game still takes no player input on the frame on
+        /// which the window closes.
         /// </summary>
         public static void CloseEntryWindow()
         {
@@ -276,9 +279,95 @@ namespace ModUtils
         }
 
         /// <summary>
-        /// True while a window that <see cref="OpenEntryWindow"/> opened in this copy of ModUtils is open.
+        /// True while a window that <see cref="OpenEntryWindow"/> opened in this copy of ModUtils is open. A
+        /// choice window does not count; see <see cref="IsWindowOpen"/>.
         /// </summary>
         public static bool IsEntryWindowOpen => ConfigurationGuiEntryWindow.IsOpen;
+
+        /// <summary>
+        /// Opens a window in the middle of the game screen with one row per item of
+        /// <paramref name="choices"/>, in the given order, under <paramref name="title"/> and, when it is not
+        /// empty, <paramref name="note"/>. Each row shows its name and a dropdown that lists the row's options
+        /// and shows its selected option. Returns the window, or null when it did not open.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The window looks like the one <see cref="OpenEntryWindow"/> opens, and it has its frame, header,
+        /// scrolling list and Close button, and its description area when a row has a description, but no
+        /// Apply or Reset buttons: when the player picks an option other than the shown one, the row's choose
+        /// callback gets the option's index at once. A null result clears the status line below the rows;
+        /// any other result is shown there, for example why the choice was refused. Then every row reads its
+        /// options and selection again, so a refused choice shows the row's selection as before. Reading them
+        /// again never calls a choose callback, and neither does
+        /// <see cref="ConfigurationGuiChoiceWindow.Refresh"/>.
+        /// </para>
+        /// <para>
+        /// With <paramref name="filterChanged"/>, a search field above the rows passes every change of its
+        /// text to the callback, clears the status line and reads every row again, so the callback can
+        /// narrow the options the rows return. Escape while the field is focused leaves the field.
+        /// </para>
+        /// <para>
+        /// The Close button, Escape and the gamepad back button close the window at once, as does
+        /// <see cref="ConfigurationGuiChoiceWindow.Close"/>; an open dropdown list takes Escape first and
+        /// closes. A row's description shows below the list while the pointer is over the row. The window
+        /// opens only in a world, blocks the game's input as the entry window does, also on the frame on
+        /// which it closes, and closes when the world session ends. It is built for the keyboard and the
+        /// mouse and has no gamepad navigation. When a callback throws, the error is logged with the
+        /// plugin's name and the window closes; the exception does not reach the caller.
+        /// </para>
+        /// <para>
+        /// For automated checks, the window's root under the game's menu is named
+        /// <c>ModUtils.ChoiceWindow</c> and the window in it is named by the plugin GUID. In the window,
+        /// <c>Scroll/Viewport/Content/Rows</c> holds the rows <c>Choice:0</c>, <c>Choice:1</c> and so on in
+        /// the order of <paramref name="choices"/>, each with one <c>TMP_Dropdown</c>; <c>Filter</c> is the
+        /// filter's <c>TMP_InputField</c>, and <c>Status</c> is the status line's <c>TMP_Text</c>, inactive
+        /// while empty.
+        /// </para>
+        /// <para>
+        /// Returns null and logs a warning when <paramref name="plugin"/> is not registered with
+        /// <see cref="Register"/>, when <paramref name="choices"/> is empty or holds a null, when no world is
+        /// loaded, and when the game's Settings screen has nothing to copy. Returns null without a warning
+        /// while a window of this copy of ModUtils is open, an entry window or a choice window
+        /// (<see cref="IsWindowOpen"/>). The first window that opens patches the game as described on
+        /// <see cref="OpenEntryWindow"/>.
+        /// </para>
+        /// </remarks>
+        /// <param name="plugin">The registered plugin that the window belongs to.</param>
+        /// <param name="title">The window's title, already translated.</param>
+        /// <param name="choices">The rows, in order.</param>
+        /// <param name="note">A line shown under the title, already translated, or null for none.</param>
+        /// <param name="filterChanged">
+        /// Receives the filter field's text on every change, or null for a window without the field.
+        /// </param>
+        public static ConfigurationGuiChoiceWindow OpenChoiceWindow(BaseUnityPlugin plugin, string title,
+            IEnumerable<ConfigurationGuiChoice> choices, string note = null, Action<string> filterChanged = null)
+        {
+            if (plugin == null) throw new ArgumentNullException(nameof(plugin));
+            if (choices == null) throw new ArgumentNullException(nameof(choices));
+
+            var guid = plugin.Info.Metadata.GUID;
+            var registered = Plugins.FirstOrDefault(x => string.Equals(x.Guid, guid, StringComparison.Ordinal));
+            if (registered == null)
+            {
+                UnityEngine.Debug.LogWarning(
+                    $"[ModUtils] The choice window of {guid} is not opened: the plugin is not registered with ConfigurationGui.Register.");
+                return null;
+            }
+
+            if (ConfigurationGuiWindowShell.IsOpen) return null;
+
+            // The window's own texts, such as Close and the filter's placeholder, follow the current language.
+            ConfigurationCustomDrawer.RefreshDefaultTranslations();
+            return ConfigurationGuiChoiceView.Open(registered, title ?? "", note, choices.ToList(), filterChanged,
+                HarmonyIdPrefix + registered.Guid);
+        }
+
+        /// <summary>
+        /// True while a window that this copy of ModUtils opened is open: an entry window
+        /// (<see cref="OpenEntryWindow"/>) or a choice window (<see cref="OpenChoiceWindow"/>). Only one is
+        /// open at a time.
+        /// </summary>
+        public static bool IsWindowOpen => ConfigurationGuiWindowShell.IsOpen;
 
         /// <summary>
         /// Creates the registered editor for the entry, or null when no registration matches. False when a

@@ -5,10 +5,10 @@ using UnityEngine;
 namespace ModUtils
 {
     /// <summary>
-    /// Keeps the game from acting on the keyboard and the mouse while an entry window is open, as it does
-    /// while its own screens are open: the player and the camera take no input, the cursor stays free,
-    /// Escape does not open the pause menu, and the inventory, map and chat keys open nothing. Every patch
-    /// leaves the game alone unless <see cref="ConfigurationGuiEntryWindow.BlocksInput"/> is true.
+    /// Keeps the game from acting on the keyboard and the mouse while an entry window or a choice window is
+    /// open, as it does while its own screens are open: the player and the camera take no input, the cursor
+    /// stays free, Escape does not open the pause menu, and the inventory, map and chat keys open nothing.
+    /// Every patch leaves the game alone unless <see cref="ConfigurationGuiWindowShell.BlocksInput"/> is true.
     /// </summary>
     internal static class ConfigurationGuiEntryWindowInput
     {
@@ -58,7 +58,7 @@ namespace ModUtils
                 if (method == null || method.DeclaringType != type)
                 {
                     UnityEngine.Debug.LogWarning(
-                        $"[ModUtils] {type.Name}.{name} was not found. An entry window cannot stop {stops} while it is open.");
+                        $"[ModUtils] {type.Name}.{name} was not found. A ModUtils window cannot stop {stops} while it is open.");
                     return;
                 }
 
@@ -71,19 +71,19 @@ namespace ModUtils
             catch (Exception e)
             {
                 UnityEngine.Debug.LogError(
-                    $"[ModUtils] Failed to patch {type.Name}.{name}. An entry window cannot stop {stops} while it is open. {e}");
+                    $"[ModUtils] Failed to patch {type.Name}.{name}. A ModUtils window cannot stop {stops} while it is open. {e}");
             }
         }
 
         private static void RefuseInput(ref bool __result)
         {
-            if (ConfigurationGuiEntryWindow.BlocksInput)
+            if (ConfigurationGuiWindowShell.BlocksInput)
                 __result = false;
         }
 
         private static bool FreeCursor()
         {
-            if (!ConfigurationGuiEntryWindow.BlocksInput) return true;
+            if (!ConfigurationGuiWindowShell.BlocksInput) return true;
 
             // The game's capture would lock the cursor first, and every lock moves it to the screen's centre,
             // so it does not run at all.
@@ -94,7 +94,7 @@ namespace ModUtils
 
         private static bool HideScrollWheel(ref float __result)
         {
-            if (!ConfigurationGuiEntryWindow.BlocksInput) return true;
+            if (!ConfigurationGuiWindowShell.BlocksInput) return true;
 
             __result = 0f;
             return false;
@@ -102,23 +102,23 @@ namespace ModUtils
 
         private static bool SkipWhileBlocked()
         {
-            return !ConfigurationGuiEntryWindow.BlocksInput;
+            return !ConfigurationGuiWindowShell.BlocksInput;
         }
 
         // A shown inventory keeps working; only opening it is held back.
         private static bool SkipWhileInventoryHidden()
         {
-            return !ConfigurationGuiEntryWindow.BlocksInput || InventoryGui.IsVisible();
+            return !ConfigurationGuiWindowShell.BlocksInput || InventoryGui.IsVisible();
         }
 
         private static bool KeepMapClosed(Minimap.MapMode mode)
         {
-            return !ConfigurationGuiEntryWindow.BlocksInput || mode != Minimap.MapMode.Large;
+            return !ConfigurationGuiWindowShell.BlocksInput || mode != Minimap.MapMode.Large;
         }
 
         private static void RefuseMapInput(ref bool takeInput)
         {
-            if (ConfigurationGuiEntryWindow.BlocksInput)
+            if (ConfigurationGuiWindowShell.BlocksInput)
                 takeInput = false;
         }
     }

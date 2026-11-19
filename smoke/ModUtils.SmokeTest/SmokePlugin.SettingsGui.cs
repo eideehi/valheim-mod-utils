@@ -107,6 +107,7 @@ namespace ModUtils.SmokeTest
             {
                 UiCheck("settings_gui_visibility_entry_is_bound", CheckVisibilityEntryIsBound),
                 UiCheck("settings_gui_entry_window_needs_world", CheckEntryWindowNeedsWorld),
+                UiCheck("settings_gui_choice_window_needs_world", CheckChoiceWindowNeedsWorld),
                 UiCheck("settings_gui_adds_one_mods_tab", () => CheckAddsOneModsTab(state)),
                 UiCheck("settings_gui_reopen_keeps_one_mods_tab", () => CheckReopenKeepsOneModsTab(state)),
                 UiCheck("settings_gui_mod_list_shows_plugin", () => CheckModListShowsPlugin(state)),
@@ -321,6 +322,67 @@ namespace ModUtils.SmokeTest
             // Closing with nothing open does nothing.
             ConfigurationGui.CloseEntryWindow();
             Expect(!ConfigurationGui.IsEntryWindowOpen, "IsEntryWindowOpen is true after CloseEntryWindow");
+            yield break;
+        }
+
+        /// <summary>
+        /// The choice window opens only in a world too, so at the main menu it is refused before any of its
+        /// callbacks runs, and nothing is open; the window itself is checked in a world by the smoke checks of
+        /// a mod that uses it.
+        /// </summary>
+        private IEnumerator CheckChoiceWindowNeedsWorld()
+        {
+            Expect(!ConfigurationGui.IsWindowOpen, "a ModUtils window is open at the main menu");
+
+            var calls = new List<string>();
+            var choices = new[]
+            {
+                new ConfigurationGuiChoice("First", "Smoke description",
+                    () =>
+                    {
+                        calls.Add("options");
+                        return new[] { "A", "B" };
+                    },
+                    () =>
+                    {
+                        calls.Add("selected");
+                        return 0;
+                    },
+                    index =>
+                    {
+                        calls.Add("choose");
+                        return null;
+                    }),
+                new ConfigurationGuiChoice("Second", null,
+                    () =>
+                    {
+                        calls.Add("options");
+                        return Array.Empty<string>();
+                    },
+                    () =>
+                    {
+                        calls.Add("selected");
+                        return -1;
+                    },
+                    index =>
+                    {
+                        calls.Add("choose");
+                        return "refused";
+                    })
+            };
+            var window = ConfigurationGui.OpenChoiceWindow(this, "ModUtils Smoke", choices, "Smoke note",
+                text => calls.Add("filterChanged"));
+            Expect(window == null, "OpenChoiceWindow returned a window at the main menu");
+            Expect(calls.Count == 0, $"the refused window called back: [{string.Join(", ", calls)}]");
+            Expect(!ConfigurationGui.IsWindowOpen, "IsWindowOpen is true after a refused open");
+            Expect(!ConfigurationGui.IsEntryWindowOpen, "IsEntryWindowOpen is true after a refused choice window");
+
+            // Closing with nothing open does nothing, also for the entry window.
+            window?.Close();
+            window?.Refresh();
+            ConfigurationGui.CloseEntryWindow();
+            Expect(!ConfigurationGui.IsWindowOpen, "IsWindowOpen is true after closing with nothing open");
+            Expect(calls.Count == 0, $"closing with nothing open called back: [{string.Join(", ", calls)}]");
             yield break;
         }
 
