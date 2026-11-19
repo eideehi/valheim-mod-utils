@@ -106,6 +106,7 @@ namespace ModUtils.SmokeTest
             var checks = new List<KeyValuePair<string, Func<IEnumerator>>>
             {
                 UiCheck("settings_gui_visibility_entry_is_bound", CheckVisibilityEntryIsBound),
+                UiCheck("settings_gui_entry_window_needs_world", CheckEntryWindowNeedsWorld),
                 UiCheck("settings_gui_adds_one_mods_tab", () => CheckAddsOneModsTab(state)),
                 UiCheck("settings_gui_reopen_keeps_one_mods_tab", () => CheckReopenKeepsOneModsTab(state)),
                 UiCheck("settings_gui_mod_list_shows_plugin", () => CheckModListShowsPlugin(state)),
@@ -301,6 +302,25 @@ namespace ModUtils.SmokeTest
                 Expect(string.Equals(shown, expected, StringComparison.Ordinal),
                     $"the {what} of {VisibilityEntryIdentity} is [{shown}], expected [{expected}]");
 
+            yield break;
+        }
+
+        /// <summary>
+        /// The entry window opens only in a world, so at the main menu it is refused and nothing is open; the
+        /// window itself is checked in a world by the smoke checks of a mod that uses it.
+        /// </summary>
+        private IEnumerator CheckEntryWindowNeedsWorld()
+        {
+            Expect(!ConfigurationGui.IsEntryWindowOpen, "an entry window is open at the main menu");
+
+            var entries = new ConfigEntryBase[] { _guiSample.ToggleEntry, _guiSample.ChoiceEntry };
+            var opened = ConfigurationGui.OpenEntryWindow(this, "ModUtils Smoke", entries, "Smoke note");
+            Expect(!opened, "OpenEntryWindow reported a window opened at the main menu");
+            Expect(!ConfigurationGui.IsEntryWindowOpen, "IsEntryWindowOpen is true after a refused open");
+
+            // Closing with nothing open does nothing.
+            ConfigurationGui.CloseEntryWindow();
+            Expect(!ConfigurationGui.IsEntryWindowOpen, "IsEntryWindowOpen is true after CloseEntryWindow");
             yield break;
         }
 

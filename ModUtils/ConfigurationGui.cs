@@ -13,7 +13,8 @@ using Object = UnityEngine.Object;
 namespace ModUtils
 {
     /// <summary>
-    /// In-game configuration screen reached from a "Mods" tab on the vanilla Settings screen.
+    /// In-game configuration screen reached from a "Mods" tab on the vanilla Settings screen, and a window
+    /// that shows chosen entries of a mod in a world.
     /// </summary>
     public static class ConfigurationGui
     {
@@ -31,6 +32,7 @@ namespace ModUtils
         internal const string ReadOnlyKey = "@config_gui_read_only";
         internal const string PressKeyKey = "@config_gui_press_key";
         internal const string ClearKey = "@config_gui_clear";
+        internal const string CloseKey = "@config_gui_close";
 
         // Configuration.Bind looks up an entry's texts by its section and key, which give these keys.
         private const string ShowOnSettingsScreenSection = "mod_utils";
@@ -77,6 +79,7 @@ namespace ModUtils
                         { ReadOnlyKey, "Read-only" },
                         { PressKeyKey, "Press a key..." },
                         { ClearKey, "Clear" },
+                        { CloseKey, "Close" },
                         { ShowOnSettingsScreenCategoryKey, "Settings screen" },
                         { ShowOnSettingsScreenNameKey, "Show on the Settings screen" },
                         {
@@ -113,6 +116,7 @@ namespace ModUtils
                         { ReadOnlyKey, "\u8AAD\u307F\u53D6\u308A\u5C02\u7528" },
                         { PressKeyKey, "\u30AD\u30FC\u3092\u62BC\u3057\u3066\u304F\u3060\u3055\u3044..." },
                         { ClearKey, "\u30AF\u30EA\u30A2" },
+                        { CloseKey, "\u9589\u3058\u308B" },
                         { ShowOnSettingsScreenCategoryKey, "\u8A2D\u5B9A\u753B\u9762" },
                         { ShowOnSettingsScreenNameKey, "\u8A2D\u5B9A\u753B\u9762\u306B\u8868\u793A" },
                         {
@@ -194,6 +198,87 @@ namespace ModUtils
                 new KeyValuePair<ConfigurationCustomDrawer.IsMatchConfig, Func<ConfigurationGuiCustomEditor>>(
                     matcher, factory));
         }
+
+        /// <summary>
+        /// Opens a window in the middle of the game screen that lists <paramref name="entries"/> of
+        /// <paramref name="plugin"/> in the given order, under <paramref name="title"/> and, when it is not
+        /// empty, <paramref name="note"/>. Each entry gets the row it has on the plugin's panel on the Mods
+        /// tab: the same name, description, editor and Reset button, and editors registered with
+        /// <see cref="RegisterEditor"/> too. Returns whether the window opened.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Edits stay pending in the window until its Apply button writes them to the entries, as on the
+        /// panel; the window stays open after Apply. Close or Escape closes the window at once when nothing
+        /// is pending, and else asks whether to discard the pending edits: Yes discards them and closes the
+        /// window, No keeps it open with its edits. The question covers the window, so nothing in it takes
+        /// clicks until it is answered. A focused editor, such as a text field or a key editor waiting for a
+        /// key, takes Escape first. The gamepad's back button closes the window as Escape does, although the
+        /// window is not built for gamepad navigation. <see cref="CloseEntryWindow"/> closes it without
+        /// asking.
+        /// The window has no sections, no search and no advanced filter, so advanced entries show too.
+        /// Entries that the panel never shows (<c>Browsable = false</c>, and the entry that
+        /// <see cref="Register"/> binds) get no row.
+        /// </para>
+        /// <para>
+        /// The window opens only in a world, not at the main menu, and also when the Settings screen has not
+        /// been opened in the session. While it is open, the player does not move, look around, attack,
+        /// use or build, the hotbar keys and the mouse wheel do nothing in the game, the cursor stays free,
+        /// Escape does not open the pause menu, and the inventory, map and chat keys open nothing; this also
+        /// holds on the frame on which the window closes, so the key press that closes it does not reach the
+        /// game. Leaving the world closes the window and drops its pending edits.
+        /// </para>
+        /// <para>
+        /// Returns false and logs a warning when <paramref name="plugin"/> is not registered with
+        /// <see cref="Register"/>, when <paramref name="entries"/> is empty, holds a null or an entry that
+        /// is not in the plugin's <see cref="BaseUnityPlugin.Config"/>, or has no entry with a row, when no
+        /// world is loaded, and when the game's Settings screen has nothing to copy. Returns false without a
+        /// warning while a window of this copy of ModUtils is open; close it first to show other entries.
+        /// The first window that opens patches the game with the Harmony id
+        /// <c>net.eideehi.modutils.configurationgui.&lt;plugin GUID&gt;</c>; the patches do nothing while
+        /// no window is open.
+        /// </para>
+        /// </remarks>
+        /// <param name="plugin">The registered plugin whose entries are shown.</param>
+        /// <param name="title">The window's title, already translated.</param>
+        /// <param name="entries">The entries to show, in order, each once.</param>
+        /// <param name="note">A line shown under the title, already translated, or null for none.</param>
+        public static bool OpenEntryWindow(BaseUnityPlugin plugin, string title,
+            IEnumerable<ConfigEntryBase> entries, string note = null)
+        {
+            if (plugin == null) throw new ArgumentNullException(nameof(plugin));
+            if (entries == null) throw new ArgumentNullException(nameof(entries));
+
+            var guid = plugin.Info.Metadata.GUID;
+            var registered = Plugins.FirstOrDefault(x => string.Equals(x.Guid, guid, StringComparison.Ordinal));
+            if (registered == null)
+            {
+                UnityEngine.Debug.LogWarning(
+                    $"[ModUtils] The entry window of {guid} is not opened: the plugin is not registered with ConfigurationGui.Register.");
+                return false;
+            }
+
+            if (ConfigurationGuiEntryWindow.IsOpen) return false;
+
+            ConfigurationCustomDrawer.RefreshDefaultTranslations();
+            return ConfigurationGuiEntryWindow.Open(registered, title ?? "", note, entries.ToList(),
+                HarmonyIdPrefix + registered.Guid);
+        }
+
+        /// <summary>
+        /// Closes the window that <see cref="OpenEntryWindow"/> opened, without asking and without writing
+        /// its pending edits, and takes down its discard prompt if it is shown. Does nothing when no window
+        /// is open. The game still takes no player input on the frame on which the window closes.
+        /// </summary>
+        public static void CloseEntryWindow()
+        {
+            ConfigurationGuiEntryWindow.CloseCurrent();
+        }
+
+        /// <summary>
+        /// True while a window that <see cref="OpenEntryWindow"/> opened in this copy of ModUtils is open.
+        /// </summary>
+        public static bool IsEntryWindowOpen => ConfigurationGuiEntryWindow.IsOpen;
 
         /// <summary>
         /// Creates the registered editor for the entry, or null when no registration matches. False when a

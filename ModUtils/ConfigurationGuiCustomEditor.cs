@@ -142,7 +142,7 @@ namespace ModUtils
             base(entry)
         {
             _editor = editor;
-            _readOnly = ConfigurationGuiPanel.GetAttributes(entry)?.ReadOnly == true;
+            _readOnly = ConfigurationGuiEntryView.GetAttributes(entry)?.ReadOnly == true;
             editor?.Attach(this);
         }
 

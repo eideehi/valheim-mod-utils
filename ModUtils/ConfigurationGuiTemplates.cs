@@ -12,7 +12,8 @@ using Object = UnityEngine.Object;
 namespace ModUtils
 {
     /// <summary>
-    /// Vanilla Settings widgets that the Mods page copies, and helpers that build UI from them.
+    /// Vanilla Settings widgets that the Mods page and the entry window copy, and helpers that build UI from
+    /// them.
     /// </summary>
     internal sealed class ConfigurationGuiTemplates
     {
@@ -51,6 +52,15 @@ namespace ModUtils
         /// </summary>
         internal Image TooltipFrame { get; private set; }
 
+        /// <summary>
+        /// The image of the vanilla Settings panel, or null when the panel has none.
+        /// </summary>
+        internal Image PanelFrame { get; private set; }
+
+        /// <summary>
+        /// Reads the widgets from <paramref name="settings"/>, an open Settings screen or the Settings
+        /// component of the prefab that the game opens the screen from; nothing is changed on it.
+        /// </summary>
         internal static ConfigurationGuiTemplates Find(Settings settings)
         {
             var gameplay = settings.GetComponentInChildren<GameplaySettings>(true);
@@ -94,6 +104,10 @@ namespace ModUtils
             var tooltip = GetField<GameObject>(FindVanilla<SettingsTooltip>(settings), "m_tooltip");
             var frame = tooltip != null ? Utils.FindChild(tooltip.transform, "Background") : null;
             templates.TooltipFrame = frame != null ? frame.GetComponent<Image>() : null;
+
+            var panel = GetField<GameObject>(settings, "m_settingsPanel");
+            var panelImage = panel != null ? panel.GetComponent<Image>() : null;
+            templates.PanelFrame = panelImage != null ? panelImage : null;
 
             return templates;
         }
@@ -285,7 +299,8 @@ namespace ModUtils
             var box = toggle.targetGraphic != null ? toggle.targetGraphic.rectTransform : null;
             if (box != null)
             {
-                // The template sits on the vanilla screen, so its sizes are the laid-out ones.
+                // The sizes are the template's: the laid-out widget of the open vanilla screen, or for the entry
+                // window the widget of the screen's prefab.
                 var boxSize = template.targetGraphic.rectTransform.rect.size;
                 var check = toggle.graphic != null ? toggle.graphic.rectTransform : null;
                 var checkSize = template.graphic != null ? template.graphic.rectTransform.rect.size : Vector2.zero;
@@ -406,6 +421,29 @@ namespace ModUtils
             return text;
         }
 
+
+        /// <summary>
+        /// Gives <paramref name="target"/> an image drawn like <paramref name="source"/>, without copying
+        /// the source's children, or a plain one in <paramref name="fallback"/> when there is no source.
+        /// </summary>
+        internal static Image AddFrame(GameObject target, Image source, Color fallback)
+        {
+            var image = target.AddComponent<Image>();
+            if (source == null)
+            {
+                image.color = fallback;
+                return image;
+            }
+
+            image.sprite = source.sprite;
+            image.type = source.type;
+            image.fillCenter = source.fillCenter;
+            image.pixelsPerUnitMultiplier = source.pixelsPerUnitMultiplier;
+            image.preserveAspect = source.preserveAspect;
+            image.material = source.material;
+            image.color = source.color;
+            return image;
+        }
 
         internal static void SetLabel(Component component, string label)
         {

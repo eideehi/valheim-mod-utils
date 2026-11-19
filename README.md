@@ -110,6 +110,19 @@ internal sealed class ItemListEditor : ConfigurationGuiCustomEditor
 }
 ```
 
+### Entry window
+
+A registered mod can also show some of its entries in a window in the middle of the game screen, for example when a key is pressed:
+
+```csharp
+ConfigurationGui.OpenEntryWindow(this, title, new ConfigEntryBase[] { enabled, range }, note);
+```
+
+- The window lists the given entries in the given order, under the title and, when it is not empty, the note line; both are shown as given, so pass translated text. Each entry gets the row it has in the mod's panel: the same name, description, editor, Reset button and read-only note, and editors registered with `RegisterEditor` too. There are no sections, no search and no advanced toggle, so advanced entries are shown as well; `Browsable = false` entries and `[mod_utils] show_on_settings_screen` get no row.
+- Changes stay pending until **Apply** is pressed, as in the panel, and the window stays open. **Close** or Escape closes it at once when nothing is pending, and else asks whether to discard the changes: Yes discards them and closes the window, No keeps it open with the changes. The question covers the window, so nothing in it takes clicks until it is answered. A focused editor, such as a text field or a key editor waiting for a key, takes Escape first. `ConfigurationGui.CloseEntryWindow()` closes it without asking and drops pending changes, and `ConfigurationGui.IsEntryWindowOpen` tells whether a window is open.
+- The window opens only in a world, not at the main menu, also when the Settings screen has not been opened yet. `OpenEntryWindow` returns false while a window is open, and returns false with a warning for a mod that is not registered, no entries, an entry that is not in the mod's `Config`, or no world. Leaving the world closes the window and drops pending changes.
+- While the window is open, and on the frame on which it closes, the player does not move, look around, attack, use or build, the hotbar keys and the mouse wheel do nothing in the game, the cursor is free, Escape does not open the pause menu, and the inventory, map and chat keys open nothing; so the key press that closes the window does not reach the game. The first window patches the game for this; the patches do nothing otherwise. The window is built for the keyboard and the mouse and has no gamepad navigation, but the gamepad's back button closes it as Escape does.
+
 ## Developer smoke tests
 
 Optional in-game smoke-test tooling lives under [smoke/](smoke/). See [smoke/README.md](smoke/README.md) for build and deploy commands.

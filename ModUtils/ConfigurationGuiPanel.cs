@@ -2,11 +2,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using BepInEx.Configuration;
 using TMPro;
 using UnityEngine;
-using UnityEngine.Events;
-using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace ModUtils
@@ -18,52 +15,23 @@ namespace ModUtils
     /// on Back, on Escape or the gamepad back button, asking first when edits are pending, and without
     /// asking when another tab hides the page; closing drops pending edits.
     /// </summary>
-    internal sealed class ConfigurationGuiPanel : MonoBehaviour
+    internal sealed class ConfigurationGuiPanel : ConfigurationGuiEntryView
     {
-        private const float Padding = 8f;
-        private const float Spacing = 6f;
-        private const float RowMinHeight = ConfigurationGuiTemplates.DefaultControlHeight + 2 * RowPadding;
-        private const int RowPadding = 2;
-        private const float RowSpacing = 8f;
-        private const float SectionRowSpacing = 2f;
         // As tall as a single-line row with its spacing, so headers stand out from the controls.
         private const float SectionHeaderHeight = RowMinHeight + SectionRowSpacing;
-        private const int WheelStepRows = 3;
-        private const float NameMinWidth = 120f;
-        private const float EditorMinWidth = 200f;
-        private const float ResetWidth = 120f;
-        private const float ScrollMinHeight = 120f;
-        private const float ScrollbarSpacing = 4f;
-        private const float DescriptionLines = 3.6f;
-        private const float UnfoldDelay = 1.5f;
-        private const float BackMinWidth = 120f;
-        private const float BackMaxWidth = 260f;
-        // Building every row of a long mod in one frame stops the game for a moment, so the panel opens
-        // with its first rows and adds the rest a batch per frame.
-        private const int RowsPerFrame = 16;
 
         // Kept by this ModUtils copy for the game session, so every panel it opens starts with the user's
         // last choice.
         private static bool _showAdvanced;
 
-        private readonly List<Row> _rows = new List<Row>();
         private readonly List<Section> _sections = new List<Section>();
         private readonly Queue<(Section Section, Row Row)> _unbuiltRows = new Queue<(Section, Row)>();
-        private Button _apply;
-        private bool _closed;
-        private TMP_Text _description;
-        private ConfigurationGuiFullDescription _fullDescription;
-        private ConfigurationGuiRowHover _hoveredRow;
         private GameObject _list;
         private GameObject _panels;
-        private ConfigurationGuiPendingValues _pending;
-        private bool _prompting;
         private Button _resetAll;
         private ConfigurationGuiInputField _search;
         private bool _searching;
         private string[] _searchTerms = Array.Empty<string>();
-        private ConfigurationGuiTemplates _templates;
-        private float _unfoldTime = float.PositiveInfinity;
 
         internal static void Open(ConfigurationGuiPlugin plugin, RectTransform page)
         {
@@ -108,76 +76,21 @@ namespace ModUtils
         /// True when the search field or an editor in this panel handles the current Escape press itself, so
         /// Escape must not close the panel.
         /// </summary>
-        internal bool IsEscapeConsumed()
+        internal override bool IsEscapeConsumed()
         {
             if (_search != null && _search.ConsumesEscape())
                 return true;
 
-            foreach (var row in _rows)
-                if (row.Editor.ConsumesEscape())
-                    return true;
-
-            return false;
+            return base.IsEscapeConsumed();
         }
 
         /// <summary>
-        /// The row the description area shows, or null when no row is hovered.
+        /// Returns to the mod list.
         /// </summary>
-        internal ConfigurationGuiRowHover HoveredRow => _hoveredRow;
-
-        /// <summary>
-        /// Shows the description of <paramref name="row"/> in the area below the list, or clears the area
-        /// when <paramref name="row"/> is null. A description that the area cuts off unfolds in full over
-        /// the list once the pointer has stayed on the row for <see cref="UnfoldDelay"/> seconds; any
-        /// hover change or mouse button press folds it again, and it does not unfold while a text field is
-        /// being edited.
-        /// </summary>
-        internal void ShowDescription(ConfigurationGuiRowHover row)
+        protected override void Close()
         {
-            var description = row != null ? row.Description : "";
-            if (_description != null)
-                _description.text = description ?? "";
-
-            _hoveredRow = row;
-            // Unscaled, because the pause menu stops game time.
-            _unfoldTime = string.IsNullOrEmpty(description)
-                ? float.PositiveInfinity
-                : Time.unscaledTime + UnfoldDelay;
-            _fullDescription?.Hide();
-        }
-
-        private void UnfoldDescription()
-        {
-            _unfoldTime = float.PositiveInfinity;
-            // Typing into a focused field involves no press, so the overlay must not cover the list then.
-            if (IsEditingText())
-                return;
-
-            // The text was set on an earlier frame; this makes sure the cut-off state is current.
-            _description.ForceMeshUpdate();
-            if (_description.isTextTruncated)
-                _fullDescription?.Show(_description.rectTransform, _hoveredRow.RowName, _description.text);
-        }
-
-        private static bool IsEditingText()
-        {
-            var selected = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
-            var input = selected != null ? selected.GetComponent<TMP_InputField>() : null;
-            return input != null && input.isFocused;
-        }
-
-        // Pressing a button on a row means the user is working with it, so its description stays folded
-        // until the pointer enters a row anew.
-        private void FoldDescription()
-        {
-            _unfoldTime = float.PositiveInfinity;
-            _fullDescription?.Hide();
-        }
-
-        private void Close()
-        {
-            if (_closed) return;
-            _closed = true;
+            if (IsClosed) return;
+            IsClosed = true;
 
             if (_panels != null) _panels.SetActive(false);
             if (_list != null) _list.SetActive(true);
@@ -189,52 +102,6 @@ namespace ModUtils
         }
 
         /// <summary>
-        /// Back, Escape and the gamepad back button: returns to the mod list at once without pending edits,
-        /// else asks through the game's Yes/No popup whether to drop them.
-        /// </summary>
-        private void Leave()
-        {
-            // The popup is answered with the same keys, so a press while it is shown, or on the frame it
-            // closed, belongs to the popup.
-            if (_closed || UnifiedPopup.IsVisible() || UnifiedPopup.WasVisibleThisFrame()) return;
-
-            if (!_pending.HasPending)
-            {
-                Close();
-                return;
-            }
-
-            var header = ConfigurationGui.Translate(ConfigurationGui.DiscardHeaderKey);
-            var question = ConfigurationGui.Translate(ConfigurationGui.DiscardQuestionKey);
-            _prompting = true;
-            UnifiedPopup.Push(new YesNoPopup(header, question, OnDiscardConfirmed, OnDiscardCancelled, false));
-        }
-
-        // Both answers always dismiss the popup, as the game's own answers do, and touch the panel only
-        // while it is still open.
-        private void OnDiscardConfirmed()
-        {
-            UnifiedPopup.Pop();
-            _prompting = false;
-            if (this == null || _closed) return;
-
-            _pending.Discard();
-            Close();
-        }
-
-        private void OnDiscardCancelled()
-        {
-            UnifiedPopup.Pop();
-            _prompting = false;
-        }
-
-        private void Apply()
-        {
-            _pending.Apply();
-            RefreshEditors();
-        }
-
-        /// <summary>
         /// Stages the default value of every row that can be edited, including rows that the advanced
         /// toggle or the search hides. Read-only rows, also those of types without an editor, and entries
         /// without a row (hidden by Browsable false, or the one that lists the plugin on the Mods tab) keep
@@ -242,17 +109,11 @@ namespace ModUtils
         /// </summary>
         private void ResetAll()
         {
-            foreach (var row in _rows)
+            foreach (var row in Rows)
                 if (row.Editable)
-                    _pending.Stage(row.Entry, row.Entry.DefaultValue);
+                    Pending.Stage(row.Entry, row.Entry.DefaultValue);
 
             RefreshEditors();
-        }
-
-        private void RefreshEditors()
-        {
-            foreach (var row in _rows)
-                row.Editor.Refresh();
         }
 
         /// <summary>
@@ -273,14 +134,14 @@ namespace ModUtils
                     section.CollapsedInSearch = false;
             _searching = searching;
 
-            foreach (var row in _rows)
+            foreach (var row in Rows)
                 row.Object.SetActive(IsShown(row));
 
             foreach (var section in _sections)
                 ShowSection(section);
         }
 
-        private bool IsShown(Row row)
+        protected override bool IsShown(Row row)
         {
             return (!row.Advanced || _showAdvanced || _searching) && row.Matches(_searchTerms);
         }
@@ -309,44 +170,26 @@ namespace ModUtils
                 section.HeaderLabel.text = (expanded ? "- " : "+ ") + section.Category;
         }
 
-        private void UpdateApplyButton()
-        {
-            if (_apply != null)
-                _apply.interactable = _pending.HasPending;
-        }
-
-        private void Update()
+        protected override void Update()
         {
             if (_unbuiltRows.Count > 0)
                 BuildRows();
 
-            if (Time.unscaledTime >= _unfoldTime)
-                UnfoldDescription();
-
-            if (_hoveredRow != null && (ZInput.GetKeyDown(KeyCode.Mouse0) || ZInput.GetKeyDown(KeyCode.Mouse1) ||
-                                        ZInput.GetKeyDown(KeyCode.Mouse2)))
-                FoldDescription();
-
-            // The gamepad back button closes the panel like Escape, as it closes the game's own dialogs.
-            if (_closed || !(ZInput.GetKeyDown(KeyCode.Escape) || ZInput.GetButtonDown("JoyButtonB")) ||
-                IsEscapeConsumed())
-                return;
-
-            Leave();
+            base.Update();
         }
 
         private void OnDisable()
         {
-            if (_closed) return;
-            _closed = true;
+            if (IsClosed) return;
+            IsClosed = true;
 
             // Another tab hid the page; pending edits are dropped with the panel, and so is a discard popup
             // it was showing, which would otherwise stay open while Settings takes Escape again. Hierarchy
             // changes are not allowed while the page is being deactivated, so this happens on the next frame.
             var settings = Settings.instance;
             if (settings != null && settings.isActiveAndEnabled)
-                settings.StartCoroutine(RestoreListNextFrame(gameObject, _panels, _list, _prompting));
-            _prompting = false;
+                settings.StartCoroutine(RestoreListNextFrame(gameObject, _panels, _list, IsPrompting));
+            IsPrompting = false;
         }
 
         // Releasing in the same frame as the Escape press would let Settings close on that press.
@@ -378,49 +221,22 @@ namespace ModUtils
 
         private void Build(ConfigurationGuiPlugin plugin, ConfigurationGuiTemplates templates)
         {
-            _pending = new ConfigurationGuiPendingValues(plugin.Name);
-            _templates = templates;
+            Pending = new ConfigurationGuiPendingValues(plugin.Name);
+            Templates = templates;
             var rows = CreateRows(plugin);
 
-            var layout = gameObject.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset((int)Padding, (int)Padding, (int)Padding, (int)Padding);
-            layout.spacing = Spacing;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = true;
-            layout.childForceExpandHeight = false;
-
-            var label = templates.Label;
-
-            var title = ConfigurationGuiTemplates.CreateText(transform, "Title", label, 1.25f);
-            title.text = $"{plugin.Name} v{plugin.Version}";
-            title.fontStyle = FontStyles.Bold;
-
-            var hint = ConfigurationGuiTemplates.CreateText(transform, "Hint", label, 0.85f);
-            hint.text = ConfigurationGui.Translate(ConfigurationGui.StagedApplyHintKey);
-            hint.color = new Color(hint.color.r, hint.color.g, hint.color.b, hint.color.a * 0.75f);
-
+            LayOutStack((int)Padding);
+            CreateHeader($"{plugin.Name} v{plugin.Version}", null);
             CreateFilter(templates, rows.Any(x => x.Advanced));
             var content = CreateScrollView(transform, templates);
-
-            // Every row hover changes the text. Inside an area without a layout group, the change does not lay
-            // out the whole panel with its list again.
-            var descriptionArea = ConfigurationGuiTemplates.CreateRect("DescriptionArea", transform);
-            _description = ConfigurationGuiTemplates.CreateText(descriptionArea, "Description", label, 0.9f);
-            ConfigurationGuiTemplates.Stretch(_description.rectTransform, 0f, 0f, 0f, 0f);
-            _description.textWrappingMode = TextWrappingModes.Normal;
-            _description.alignment = TextAlignmentOptions.TopLeft;
-            var descriptionHeight = _description.fontSize * DescriptionLines;
-            ConfigurationGuiTemplates.AddLayout(descriptionArea.gameObject, minHeight: descriptionHeight,
-                preferredHeight: descriptionHeight);
-
-            CreateFooter(templates);
-            _fullDescription = ConfigurationGuiFullDescription.Create(transform, templates);
+            CreateDescriptionArea();
+            CreateFooter();
+            CreateFullDescription();
             CreateSections(rows, content, templates);
 
             ApplyFilter();
             UpdateApplyButton();
-            _pending.Changed = UpdateApplyButton;
+            Pending.Changed = UpdateApplyButton;
             BuildRows();
         }
 
@@ -430,7 +246,7 @@ namespace ModUtils
             for (var i = 0; i < RowsPerFrame && _unbuiltRows.Count > 0; i++)
             {
                 var (section, row) = _unbuiltRows.Dequeue();
-                CreateRow(row, section.Body, _templates);
+                CreateRow(row, section.Body);
                 section.Rows.Add(row);
                 if (!filled.Contains(section))
                     filled.Add(section);
@@ -505,103 +321,17 @@ namespace ModUtils
             });
         }
 
-        private static RectTransform CreateScrollView(Transform parent, ConfigurationGuiTemplates templates)
+        private void CreateFooter()
         {
-            var scrollRect = ConfigurationGuiTemplates.CreateRect("Scroll", parent);
-            ConfigurationGuiTemplates.AddLayout(scrollRect.gameObject, minHeight: ScrollMinHeight, flexibleHeight: 1f);
-            var scroll = scrollRect.gameObject.AddComponent<ScrollRect>();
-
-            var viewport = ConfigurationGuiTemplates.CreateRect("Viewport", scrollRect);
-            ConfigurationGuiTemplates.Stretch(viewport, 0f, 0f, 0f, 0f);
-            // Transparent, but catches the pointer between rows so the wheel scrolls everywhere.
-            viewport.gameObject.AddComponent<Image>().color = Color.clear;
-            viewport.gameObject.AddComponent<RectMask2D>();
-
-            var content = ConfigurationGuiTemplates.CreateRect("Content", viewport);
-            content.anchorMin = new Vector2(0f, 1f);
-            content.anchorMax = Vector2.one;
-            content.pivot = new Vector2(0.5f, 1f);
-            content.sizeDelta = Vector2.zero;
-            content.anchoredPosition = Vector2.zero;
-            var layout = content.gameObject.AddComponent<VerticalLayoutGroup>();
-            layout.spacing = Spacing;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = true;
-            layout.childForceExpandHeight = false;
-            content.gameObject.AddComponent<ContentSizeFitter>().verticalFit =
-                ContentSizeFitter.FitMode.PreferredSize;
-
-            scroll.viewport = viewport;
-            scroll.content = content;
-            scroll.horizontal = false;
-            scroll.vertical = true;
-            scroll.movementType = ScrollRect.MovementType.Clamped;
-            // One wheel step moves the list by a few single-line rows. The UI input module's wheel delta
-            // depends on its configured units per tick, so ask it for the tick count.
-            scroll.scrollSensitivity = WheelStepRows * (RowMinHeight + SectionRowSpacing) *
-                                       EventSystem.current.currentInputModule
-                                           .ConvertPointerEventScrollDeltaToTicks(Vector2.up).y;
-
-            if (templates.Scrollbar != null)
-            {
-                var width = ((RectTransform)templates.Scrollbar.transform).rect.width;
-                var scrollbar = ConfigurationGuiTemplates.Clone(templates.Scrollbar, scrollRect, "Scrollbar");
-                var scrollbarRect = (RectTransform)scrollbar.transform;
-                scrollbarRect.anchorMin = new Vector2(1f, 0f);
-                scrollbarRect.anchorMax = Vector2.one;
-                scrollbarRect.pivot = Vector2.one;
-                var scrollbarWidth = width >= 1f ? Mathf.Min(width, 32f) : 12f;
-                scrollbarRect.sizeDelta = new Vector2(scrollbarWidth, 0f);
-                scrollbarRect.anchoredPosition = Vector2.zero;
-                scrollbar.direction = Scrollbar.Direction.BottomToTop;
-                var navigation = scrollbar.navigation;
-                navigation.mode = Navigation.Mode.None;
-                scrollbar.navigation = navigation;
-
-                scroll.verticalScrollbar = scrollbar;
-                // Inset the viewport instead of letting the scroll rect expand it: expanding makes every layout
-                // pass of the panel lay out the whole list again.
-                ConfigurationGuiTemplates.Stretch(viewport, 0f, scrollbarWidth + ScrollbarSpacing, 0f, 0f);
-                scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
-            }
-
-            return content;
-        }
-
-        private void CreateFooter(ConfigurationGuiTemplates templates)
-        {
-            var source = templates.BackButton != null ? templates.BackButton : templates.Button;
-            var height = ConfigurationGuiTemplates.VanillaControlHeight(source);
-            var width = Mathf.Clamp(((RectTransform)source.transform).rect.width, BackMinWidth, BackMaxWidth);
-
-            var footer = ConfigurationGuiTemplates.CreateRect("Footer", transform);
-            var layout = footer.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.spacing = Spacing;
-            layout.childAlignment = TextAnchor.MiddleRight;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = false;
-            layout.childForceExpandHeight = false;
-            ConfigurationGuiTemplates.AddLayout(footer.gameObject, minHeight: height, preferredHeight: height);
+            var footer = CreateFooterLine(out var style, out var width, out var height);
 
             // Reset all sits at the left end, apart from Apply and Back at the right end.
-            _resetAll = CreateFooterButton(source, footer, "ResetAll", ConfigurationGui.ResetAllKey, width, height,
+            _resetAll = CreateFooterButton(style, footer, "ResetAll", ConfigurationGui.ResetAllKey, width, height,
                 ResetAll);
             var gap = ConfigurationGuiTemplates.CreateRect("Gap", footer);
             ConfigurationGuiTemplates.AddLayout(gap.gameObject, flexibleWidth: 1f);
-            _apply = CreateFooterButton(source, footer, "Apply", ConfigurationGui.ApplyKey, width, height, Apply);
-            CreateFooterButton(source, footer, "Back", ConfigurationGui.BackKey, width, height, Leave);
-        }
-
-        private static Button CreateFooterButton(Button source, Transform footer, string name, string labelKey,
-            float width, float height, UnityAction onClick)
-        {
-            var button = ConfigurationGuiTemplates.Clone(source, footer, name);
-            ConfigurationGuiTemplates.SetLabel(button, ConfigurationGui.Translate(labelKey));
-            ConfigurationGuiTemplates.AddLayout(button.gameObject, preferredWidth: width, preferredHeight: height);
-            button.onClick.AddListener(onClick);
-            return button;
+            CreateApplyButton(footer, style, width, height);
+            CreateFooterButton(style, footer, "Back", ConfigurationGui.BackKey, width, height, Leave);
         }
 
         private static List<Row> CreateRows(ConfigurationGuiPlugin plugin)
@@ -668,80 +398,6 @@ namespace ModUtils
             return section;
         }
 
-        private void CreateRow(Row row, RectTransform body, ConfigurationGuiTemplates templates)
-        {
-            // The name identifies the entry, so automated checks can find a row by section and key.
-            var definition = row.Entry.Definition;
-            var rowRect = ConfigurationGuiTemplates.CreateRect($"Row:{definition.Section}/{definition.Key}", body);
-            // Inactive until complete, so its widgets are copied and its texts created on an inactive object
-            // also while the panel is shown; the filter then decides whether it shows.
-            rowRect.gameObject.SetActive(false);
-            // Transparent, but makes the whole row report the pointer for the description area.
-            rowRect.gameObject.AddComponent<Image>().color = Color.clear;
-            var layout = rowRect.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.padding = new RectOffset(8, 8, RowPadding, RowPadding);
-            layout.spacing = RowSpacing;
-            // Editors can span several lines; the name and Reset line up with the first one.
-            layout.childAlignment = TextAnchor.UpperLeft;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = false;
-            layout.childForceExpandHeight = false;
-            ConfigurationGuiTemplates.AddLayout(rowRect.gameObject, minHeight: RowMinHeight);
-
-            var hover = rowRect.gameObject.AddComponent<ConfigurationGuiRowHover>();
-            hover.Panel = this;
-            hover.RowName = row.Name;
-            hover.Description = row.Description;
-
-            var name = ConfigurationGuiTemplates.CreateText(rowRect, "Name", templates.Label);
-            name.text = row.Name;
-
-            var slot = ConfigurationGuiTemplates.CreateRect("Editor", rowRect);
-            var editor = ConfigurationGuiEditor.Create(row.Entry, _pending, templates);
-            var height = editor.Build(slot, templates);
-            var lineHeight = Mathf.Max(editor.LineHeight > 0f ? editor.LineHeight : height,
-                RowMinHeight - 2 * RowPadding);
-            var slotHeight = Mathf.Max(height, lineHeight);
-            // A preferred width of 0 keeps the name's text length and the editor's content out of the width
-            // split, so the editor column starts at the same place in every row.
-            ConfigurationGuiTemplates.AddLayout(name.gameObject, minWidth: NameMinWidth, minHeight: lineHeight,
-                preferredWidth: 0f, flexibleWidth: 1f);
-            ConfigurationGuiTemplates.AddLayout(slot.gameObject, minWidth: EditorMinWidth, minHeight: slotHeight,
-                preferredWidth: 0f, preferredHeight: slotHeight, flexibleWidth: 1f);
-            row.Object = rowRect.gameObject;
-            row.Editor = editor;
-            row.Editable = editor.IsEditable && !row.ReadOnly;
-            _rows.Add(row);
-
-            if (row.Editable)
-            {
-                var reset = ConfigurationGuiTemplates.Clone(templates.Button, rowRect, "Reset");
-                ConfigurationGuiTemplates.SetLabel(reset, ConfigurationGui.Translate(ConfigurationGui.ResetKey));
-                ConfigurationGuiTemplates.SetFixedButtonLabel(reset, templates.Label, ResetWidth);
-
-                ConfigurationGuiTemplates.AddLayout(reset.gameObject, minWidth: ResetWidth,
-                    preferredWidth: ResetWidth, preferredHeight: lineHeight);
-                reset.onClick.AddListener(editor.ResetToDefault);
-            }
-            else
-            {
-                editor.SetInteractable(false);
-                var note = ConfigurationGuiTemplates.CreateText(rowRect, "ReadOnly", templates.Label, 0.85f);
-                note.text = ConfigurationGui.Translate(ConfigurationGui.ReadOnlyKey);
-                note.alignment = TextAlignmentOptions.Center;
-                ConfigurationGuiTemplates.AddLayout(note.gameObject, minWidth: ResetWidth, minHeight: lineHeight,
-                    preferredWidth: ResetWidth);
-            }
-
-            rowRect.gameObject.SetActive(IsShown(row));
-        }
-
-        internal static ConfigurationManagerAttributes GetAttributes(ConfigEntryBase entry)
-        {
-            return entry.Description?.Tags?.OfType<ConfigurationManagerAttributes>().FirstOrDefault();
-        }
-
         private sealed class Section
         {
             internal Section(string category, Button header, TMP_Text headerLabel, RectTransform body)
@@ -771,104 +427,6 @@ namespace ModUtils
             /// The state shown while searching; every search starts expanded.
             /// </summary>
             internal bool CollapsedInSearch { get; set; }
-        }
-
-        private sealed class Row
-        {
-            private Row(ConfigEntryBase entry, int index, string category, string name, string description,
-                int order, bool readOnly, bool advanced)
-            {
-                Entry = entry;
-                Index = index;
-                Category = category;
-                Name = name;
-                Description = description;
-                Order = order;
-                ReadOnly = readOnly;
-                Advanced = advanced;
-            }
-
-            internal ConfigEntryBase Entry { get; }
-
-            internal int Index { get; }
-
-            internal string Category { get; }
-
-            internal string Name { get; }
-
-            internal string Description { get; }
-
-            internal int Order { get; }
-
-            internal bool ReadOnly { get; }
-
-            internal bool Advanced { get; }
-
-            internal GameObject Object { get; set; }
-
-            internal ConfigurationGuiEditor Editor { get; set; }
-
-            /// <summary>
-            /// True when the row has an editor that can change the value and the entry is not read-only.
-            /// </summary>
-            internal bool Editable { get; set; }
-
-            internal static Row Create(ConfigEntryBase entry, int index)
-            {
-                var attributes = GetAttributes(entry);
-                if (attributes?.Browsable == false) return null;
-
-                var definition = entry.Definition;
-                var category = string.IsNullOrEmpty(attributes?.Category) ? definition.Section : attributes.Category;
-                var name = string.IsNullOrEmpty(attributes?.DispName) ? definition.Key : attributes.DispName;
-                var description = string.IsNullOrEmpty(attributes?.Description)
-                    ? entry.Description?.Description
-                    : attributes.Description;
-
-                return new Row(entry, index, category, name, description ?? "", attributes?.Order ?? 0,
-                    attributes?.ReadOnly == true, attributes?.IsAdvanced == true);
-            }
-
-            internal bool Matches(string[] terms)
-            {
-                var definition = Entry.Definition;
-                return terms.All(x => Contains(Name, x) || Contains(Category, x) || Contains(Description, x) ||
-                                      Contains(definition.Section, x) || Contains(definition.Key, x));
-            }
-
-            private static bool Contains(string text, string term)
-            {
-                return text != null && text.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Shows a row's description in its panel while the pointer is over the row.
-    /// </summary>
-    internal sealed class ConfigurationGuiRowHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
-    {
-        internal string Description;
-        internal ConfigurationGuiPanel Panel;
-        internal string RowName;
-
-        public void OnPointerEnter(PointerEventData eventData)
-        {
-            if (Panel != null)
-                Panel.ShowDescription(this);
-        }
-
-        public void OnPointerExit(PointerEventData eventData)
-        {
-            if (Panel != null)
-                Panel.ShowDescription(null);
-        }
-
-        // A row that becomes inactive gets no pointer exit, so it clears its own description.
-        private void OnDisable()
-        {
-            if (Panel != null && Panel.HoveredRow == this)
-                Panel.ShowDescription(null);
         }
     }
 }
