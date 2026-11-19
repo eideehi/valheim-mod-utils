@@ -114,6 +114,10 @@ namespace ModUtils
                 window.pivot = new Vector2(0.5f, 0.5f);
                 window.anchoredPosition = Vector2.zero;
                 window.sizeDelta = new Vector2(MaxWidth, ConfigurationGuiView.ScrollMinHeight);
+                // The game opens its Settings screen under the menu too, with the scale of the screen's prefab,
+                // and the Mods tab is drawn inside it. The window takes that scale, so its widgets are as large
+                // as on the Mods tab; the root stays unscaled, so it still covers the whole screen.
+                window.localScale = menu.m_settingsPrefab.transform.localScale;
 
                 // Behind the window's other parts and outside their layout, so its sprite size never sizes the
                 // window.
@@ -176,9 +180,9 @@ namespace ModUtils
 
         /// <summary>
         /// Makes the window <see cref="MaxWidth"/> wide and as tall as its rows need, both at most the
-        /// screen's size less <see cref="ScreenMargin"/> on each side; rows that do not fit then scroll.
-        /// The heights come from the last layout pass, so <paramref name="rebuild"/> lays the window out
-        /// first for a window that has not been laid out yet.
+        /// screen's size less <see cref="ScreenMargin"/> on each side, all in the window's own units; rows
+        /// that do not fit then scroll. The heights come from the last layout pass, so
+        /// <paramref name="rebuild"/> lays the window out first for a window that has not been laid out yet.
         /// </summary>
         internal void FitSize(bool rebuild)
         {
@@ -191,7 +195,11 @@ namespace ModUtils
             }
 
             var area = _canvas != null ? ((RectTransform)_canvas.transform).rect : _root.rect;
-            var width = Mathf.Max(0f, Mathf.Min(MaxWidth, area.width - 2f * ScreenMargin));
+            // The window is scaled like the Settings screen, so the screen holds fewer of its units.
+            var scale = window.localScale;
+            var areaWidth = area.width / scale.x;
+            var areaHeight = area.height / scale.y;
+            var width = Mathf.Max(0f, Mathf.Min(MaxWidth, areaWidth - 2f * ScreenMargin));
             if (Mathf.Abs(window.rect.width - width) > 0.5f)
                 window.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, width);
 
@@ -202,7 +210,7 @@ namespace ModUtils
             // minimum height.
             var others = LayoutUtility.GetPreferredHeight(window) - LayoutUtility.GetPreferredHeight(_scroll);
             var list = Mathf.Max(LayoutUtility.GetPreferredHeight(_content), ConfigurationGuiView.ScrollMinHeight);
-            var height = Mathf.Max(0f, Mathf.Min(others + list, area.height - 2f * ScreenMargin));
+            var height = Mathf.Max(0f, Mathf.Min(others + list, areaHeight - 2f * ScreenMargin));
             if (Mathf.Abs(window.rect.height - height) > 0.5f)
                 window.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
         }
