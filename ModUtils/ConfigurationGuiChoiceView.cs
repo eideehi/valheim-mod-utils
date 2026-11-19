@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace ModUtils
 {
@@ -246,8 +247,16 @@ namespace ModUtils
             if (!texts.SequenceEqual(row.Options))
             {
                 // An open list shows the old options, so a click on it would pick an index into the new ones.
+                // Hiding only fades the list out, and its items take clicks until it is gone, so they stop
+                // taking them first. The list sits beside the dropdown's template, which is inactive while the
+                // list is open and keeps its items as they are for the next list.
                 if (dropdown.IsExpanded)
+                {
+                    foreach (var item in dropdown.template.parent.GetComponentsInChildren<Toggle>())
+                        item.interactable = false;
                     dropdown.Hide();
+                }
+
                 row.Options = texts;
                 dropdown.ClearOptions();
                 dropdown.AddOptions(texts);
